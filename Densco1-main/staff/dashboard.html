@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dashboard — Densco Staff Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../css/style.css" />
+  </head>
+  <body data-page="dashboard" data-roles="">
+    <div class="app">
+      <aside class="sidebar" id="sidebar"></aside>
+      <div class="app-main">
+        <main>
+          <div class="page-head">
+            <div>
+              <h1>Dashboard</h1>
+              <p class="muted" id="sub"></p>
+            </div>
+          </div>
+          <div class="grid4" id="kpis"></div>
+          <div class="grid2 mt2">
+            <div class="card">
+              <h3>Recent orders</h3>
+              <div id="recent"></div>
+            </div>
+            <div class="card">
+              <h3>Low stock alerts</h3>
+              <div id="low"></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+    <script src="../js/store.js"></script>
+    <script src="../js/staff-portal.js"></script>
+    <script>
+      DHP.applyRoles(document);
+      document.getElementById("sub").textContent =
+        "Signed in as " +
+        DHP.roleName +
+        ", " +
+        new Date().toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        });
+      const O = DHP.orders(),
+        P = DHP.products(),
+        active = O.filter((o) => o.status !== "completed").length,
+        lowP = P.filter((p) => DHP.state(p) !== "in");
+      const revenue = DHP.sales().reduce((s, r) => s + r.total, 0);
+      let kpis = [
+        ["Active orders", active, "orders.html"],
+        ["Products", P.length + " items", "inventory.php"],
+        ["Low stock alerts", lowP.length, "inventory.php"],
+      ];
+      if (DHP.role === "owner")
+        kpis.push(["Revenue (recent)", DHP.peso(revenue), "reports.html"]);
+      else if (DHP.role === "admin")
+        kpis.push([
+          "Open inquiries",
+          DHP.get("denscoInquiries", []).filter((i) => i.status === "open")
+            .length,
+          "inquiries.html",
+        ]);
+      else kpis.push(["Restock requests", lowP.length, "inventory.php"]);
+      document.getElementById("kpis").innerHTML = kpis
+        .map(
+          (k) =>
+            `<a class="kpi" href="${k[2]}" style="display:block"><small>${k[0]}</small><b>${k[1]}</b></a>`,
+        )
+        .join("");
+      document.getElementById("recent").innerHTML =
+        '<div class="list">' +
+        O.slice(0, 4)
+          .map(
+            (o) =>
+              `<div class="row"><span><b>${o.id}</b><br><span class="muted">${DHP.esc(o.customer)}, ${o.date}</span></span><span class="badge ${o.status}">${DHP.statusLabel(o)}</span></div>`,
+          )
+          .join("") +
+        "</div>";
+      document.getElementById("low").innerHTML = lowP.length
+        ? '<div class="list">' +
+          lowP
+            .map(
+              (p) =>
+                `<div class="row"><span><b>${DHP.esc(p.name)}</b><br><span class="muted">${p.cat}</span></span><span class="stock ${DHP.state(p)}">${DHP.stateLabel(p)}</span></div>`,
+            )
+            .join("") +
+          "</div>"
+        : '<p class="muted">All products are adequately stocked.</p>';
+    </script>
+  </body>
+</html>

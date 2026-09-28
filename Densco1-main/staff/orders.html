@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Orders — Densco Staff Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body data-page="orders" data-roles="owner admin">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="app-main">
+      <main>
+        <div class="page-head">
+          <h1>Order management</h1>
+          <p class="muted">Verify payment proofs and update fulfillment status.</p>
+        </div>
+
+        <div class="toolbar">
+          <input id="q" type="search" placeholder="Search order ID or customer" />
+        </div>
+
+        <div class="card flush">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>Customer</th>
+                <th>Date</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Fulfillment</th>
+                <th>Payment</th>
+                <th>Proof</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+
+        <div class="modal" id="proofModal">
+          <div class="modal-box">
+            <div class="modal-head">
+              <h3 id="proofTitle">Payment proof</h3>
+              <button class="modal-x" data-close>&times;</button>
+            </div>
+            <div class="proof" id="proofBody"></div>
+            <button class="btn btn-line" data-close>Close</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="../js/store.js"></script>
+  <script src="../js/staff-portal.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let term = "";
+
+    function statusOption(value, label, current) {
+      return `<option value="${value}"${current === value ? " selected" : ""}>${label}</option>`;
+    }
+
+    function renderRow(o) {
+      const proofCell = o.proof
+        ? `<button class="link" data-proof="${o.id}">View proof</button>`
+        : '<span class="muted sm">N/A</span>';
+
+      const shippedLabel = o.fulfillment === "Store Pickup" ? "Ready for pickup" : "Shipped";
+
+      const statusSelect =
+        `<select data-status="${o.id}">` +
+        statusOption("pending", "Pending", o.status) +
+        statusOption("confirmed", "Confirmed", o.status) +
+        statusOption("shipped", shippedLabel, o.status) +
+        statusOption("completed", "Completed", o.status) +
+        `</select>`;
+
+      return (
+        `<tr>` +
+        `<td><strong>${o.id}</strong></td>` +
+        `<td>${DHP.esc(o.customer)}</td>` +
+        `<td>${o.date}</td>` +
+        `<td>${DHP.esc(o.summary)}</td>` +
+        `<td>${DHP.peso(o.total)}</td>` +
+        `<td>${o.fulfillment}</td>` +
+        `<td>${o.payment}</td>` +
+        `<td>${proofCell}</td>` +
+        `<td>${statusSelect}</td>` +
+        `</tr>`
+      );
+    }
+
+    function render() {
+      const O = DHP.orders().filter(
+        (o) =>
+          o.id.toLowerCase().includes(term.toLowerCase()) ||
+          o.customer.toLowerCase().includes(term.toLowerCase())
+      );
+
+      $("rows").innerHTML = O.length
+        ? O.map(renderRow).join("")
+        : '<tr><td colspan="9"><div class="empty">No orders match your search.</div></td></tr>';
+    }
+
+    $("q").addEventListener("input", (e) => {
+      term = e.target.value;
+      render();
+    });
+
+    $("rows").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-proof]");
+      if (!b) return;
+
+      const o = DHP.orders().find((x) => x.id === b.dataset.proof);
+      $("proofTitle").textContent = "Payment proof, " + o.id;
+      $("proofBody").innerHTML =
+        `<div><strong>Uploaded file</strong><p class="muted sm mt">${DHP.esc(o.proof)}</p></div>`;
+      $("proofModal").classList.add("open");
+    });
+
+    $("rows").addEventListener("change", (e) => {
+      const s = e.target.closest("[data-status]");
+      if (!s) return;
+
+      const O = DHP.orders();
+      O.forEach((o) => {
+        if (o.id === s.dataset.status) o.status = s.value;
+      });
+
+      DHP.saveOrders(O);
+      DHP.toast("Order " + s.dataset.status + " updated");
+    });
+
+    render();
+  </script>
+</body>
+</html>

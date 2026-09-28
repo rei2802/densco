@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Staff Accounts — Densco Staff Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body data-page="staff" data-roles="owner admin">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="app-main">
+      <main>
+        <div class="page-head">
+          <h1>Staff accounts</h1>
+          <p class="muted">Manage who can access the admin portal.</p>
+        </div>
+
+        <div class="card">
+          <h3>Inventory staff</h3>
+          <div class="list" id="inv"></div>
+        </div>
+
+        <div class="card" data-roles="owner">
+          <h3>Administrators</h3>
+          <div class="list" id="adm"></div>
+        </div>
+
+        <div class="card" data-roles="owner">
+          <h3>Ownership</h3>
+          <div class="list">
+            <div class="row">
+              <span
+                ><b>Owner account and ownership controls</b
+                ><span class="muted">Not transferable from this screen</span></span
+              ><span class="badge">Owner only</span>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="../js/store.js"></script>
+  <script src="../js/staff-portal.js"></script>
+  <script>
+    DHP.applyRoles(document);
+
+    const inv = [
+      ["J. Ramirez", "Inventory Staff"],
+      ["A. Bautista", "Inventory Staff"]
+    ];
+    const adm = [["R. Villanueva", "Administrator"]];
+
+    function renderStaffRow(s) {
+      return (
+        `<div class="row">` +
+          `<span><b>${s[0]}</b><span class="muted">${s[1]}, active</span></span>` +
+          `<span class="flex">` +
+            `<span class="badge in">Active</span>` +
+            `<button class="btn btn-line btn-sm">Manage</button>` +
+          `</span>` +
+        `</div>`
+      );
+    }
+
+    function renderAddRow(label, hint) {
+      return (
+        `<div class="row">` +
+          `<span><b>${label}</b><span class="muted">${hint}</span></span>` +
+          `<button class="btn btn-red btn-sm">Add staff</button>` +
+        `</div>`
+      );
+    }
+
+    document.getElementById("inv").innerHTML =
+      inv.map(renderStaffRow).join("") +
+      renderAddRow("Add inventory staff", "Create a new inventory staff login");
+
+    document.getElementById("adm").innerHTML =
+      adm.map(renderStaffRow).join("") +
+      renderAddRow("Add administrator", "Create a new administrator login");
+  </script>
+</body>
+</html>

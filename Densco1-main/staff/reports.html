@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Reports — Densco Staff Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body data-page="reports" data-roles="owner">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="app-main">
+      <main>
+        <div class="page-head">
+          <h1>Reports</h1>
+          <p class="muted">Business performance across online and walk-in channels.</p>
+        </div>
+
+        <div class="grid4" id="kpis"></div>
+
+        <div class="card mt2">
+          <h3>Revenue by category</h3>
+          <div id="cats"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="../js/store.js"></script>
+  <script src="../js/staff-portal.js"></script>
+  <script>
+    const P = DHP.products();
+    const S = DHP.sales();
+    const rev = S.reduce((s, r) => s + r.total, 0);
+    const online = S.filter((r) => r.ch === "online").reduce((s, r) => s + r.total, 0);
+
+    const kpis = [
+      ["Total revenue", DHP.peso(rev)],
+      ["Online share", Math.round((online / rev) * 100) + "%"],
+      ["Transactions", S.length],
+      ["Inventory value", DHP.peso(P.reduce((s, p) => s + p.price * p.stock, 0))]
+    ];
+
+    document.getElementById("kpis").innerHTML = kpis
+      .map((k) => `<div class="kpi"><small>${k[0]}</small><b>${k[1]}</b></div>`)
+      .join("");
+
+    const byCat = DHP.categories.map((c) => ({
+      c,
+      v: P.filter((p) => p.cat === c).reduce((s, p) => s + p.price * p.stock, 0)
+    }));
+
+    const max = Math.max(...byCat.map((x) => x.v), 1);
+
+    document.getElementById("cats").innerHTML = byCat
+      .map((x) => {
+        const pct = (x.v / max) * 100;
+        return (
+          `<div class="mt">` +
+          `<div class="flex between"><b>${x.c}</b><span class="muted sm">${DHP.peso(x.v)} in stock value</span></div>` +
+          `<div class="bar"><i style="width:${pct}%"></i></div>` +
+          `</div>`
+        );
+      })
+      .join("");
+  </script>
+</body>
+</html>

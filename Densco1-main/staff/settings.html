@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Settings — Densco Staff Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../css/style.css" />
+  </head>
+  <body data-page="settings" data-roles="owner">
+    <div class="app">
+      <aside class="sidebar" id="sidebar"></aside>
+      <div class="app-main">
+        <main>
+          <div class="page-head"><h1>Business and system settings</h1></div>
+          <div class="grid2">
+            <div class="card">
+              <h3>Business information</h3>
+              <div class="field">
+                <label>Address</label><input id="sAddr" />
+              </div>
+              <div class="field">
+                <label>Operating hours</label><input id="sHours" />
+              </div>
+              <div class="field">
+                <label>Contact channels</label><input id="sContact" />
+              </div>
+            </div>
+            <div class="card">
+              <h3>Operations</h3>
+              <div class="field">
+                <label>Delivery fee, Metro Manila (₱)</label
+                ><input id="sFee" type="number" min="0" />
+              </div>
+              <div class="field">
+                <label>Low-stock threshold (units)</label
+                ><input id="sLow" type="number" min="0" />
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-red btn-lg mt" id="save">Save settings</button>
+        </main>
+      </div>
+    </div>
+    <script src="../js/store.js"></script>
+    <script src="../js/staff-portal.js"></script>
+    <script>
+      const $ = (id) => document.getElementById(id),
+        s = DHP.settings(),
+        b = DHP.biz();
+      $("sAddr").value = b.address;
+      $("sHours").value = b.hours;
+      $("sContact").value = b.contact;
+      $("sFee").value = s.deliveryFee;
+      $("sLow").value = s.lowStock;
+      $("save").onclick = () => {
+        DHP.put("denscoSettings", {
+          address: $("sAddr").value.trim(),
+          hours: $("sHours").value.trim(),
+          contact: $("sContact").value.trim(),
+          deliveryFee: +$("sFee").value || 0,
+          lowStock: +$("sLow").value || 0,
+        });
+        DHP.toast("Settings saved");
+      };
+    </script>
+  </body>
+</html>

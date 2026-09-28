@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Restock Requests — Densco Staff Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body data-page="restock" data-roles="owner admin inventory">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="app-main">
+      <main>
+        <div class="page-head">
+          <div>
+            <h1>Restock requests</h1>
+            <p class="muted" id="pgSub">Products flagged by Inventory Staff for reordering.</p>
+          </div>
+        </div>
+
+        <div class="grid4" id="kpis"></div>
+
+        <div class="toolbar">
+          <input id="q" type="search" placeholder="Search product name" />
+        </div>
+
+        <div class="card flush">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Request</th>
+                <th>Product</th>
+                <th>Current Stock</th>
+                <th>Requested Qty</th>
+                <th>Reason</th>
+                <th>Requested By</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Remarks / Action</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+
+        <div class="modal" id="reviewModal">
+          <div class="modal-box">
+            <div class="modal-head">
+              <h3 id="reviewTitle">Review request</h3>
+              <button class="modal-x" data-close>&times;</button>
+            </div>
+            <div id="reviewInfo"></div>
+            <div class="field mt">
+              <label>Remarks</label><textarea
+                id="reviewRemarks"
+                rows="3"
+                placeholder="Optional remarks"
+              ></textarea>
+            </div>
+            <div class="flex mt" style="justify-content: flex-end">
+              <button class="btn btn-line" data-close>Cancel</button
+              ><button
+                class="btn btn-line"
+                id="reviewReject"
+                style="border-color: #b91c1c; color: #b91c1c"
+              >Reject</button
+              ><button class="btn btn-red" id="reviewApprove">Approve</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="../js/store.js"></script>
+  <script src="../js/staff-portal.js"></script>
+  <script src="../js/restock.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let term = "";
+    let reviewing = null;
+
+    if (DHP.role === "admin") {
+      $("pgSub").textContent =
+        "Review pending requests, approve or reject, and add remarks before sending to the Owner.";
+    }
+    if (DHP.role === "owner") {
+      $("pgSub").textContent =
+        "Give final approval on admin-reviewed requests, and monitor full restock history.";
+    }
+
+    function renderKpis(all) {
+      const pend = all.filter((r) => r.status === "pending").length;
+      const adm = all.filter((r) => r.status === "admin_approved").length;
+      const appr = all.filter((r) => r.status === "approved").length;
+      const rej = all.filter((r) => r.status === "rejected").length;
+
+      const kpis = [
+        ["Pending admin review", pend],
+        ["Pending owner approval", adm],
+        ["Approved", appr],
+        ["Rejected", rej]
+      ];
+
+      $("kpis").innerHTML = kpis
+        .map((k) => `<div class="kpi"><small>${k[0]}</small><b>${k[1]}</b></div>`)
+        .join("");
+    }
+
+    function actionCell(r) {
+      if (DHP.canReviewRestock(r)) {
+        return `<button class="btn btn-line btn-sm" data-review="${r.id}">Review</button>`;
+      }
+      if (r.status === "pending") {
+        return '<span class="muted sm">Awaiting Admin</span>';
+      }
+      if (r.status === "admin_approved") {
+        return '<span class="muted sm">Awaiting Owner</span>';
+      }
+      return `<span class="muted sm">${DHP.esc(r.ownerRemarks || r.adminRemarks || "No remarks")}</span>`;
+    }
+
+    function renderRow(r) {
+      const b = DHP.restockBadge(r.status);
+      const act = actionCell(r);
+
+      return (
+        `<tr>` +
+        `<td><strong>${r.id}</strong></td>` +
+        `<td>${DHP.esc(r.productName)}</td>` +
+        `<td>${r.currentStock} units</td>` +
+        `<td>${r.requestedQty} units</td>` +
+        `<td>${DHP.esc(r.reason)}</td>` +
+        `<td>${r.requestedBy}</td>` +
+        `<td>${r.date}</td>` +
+        `<td><span class="badge ${b[0]}">${b[1]}</span></td>` +
+        `<td class="acts">${act}</td>` +
+        `</tr>`
+      );
+    }
+
+    function render() {
+      const all = DHP.restockRequests();
+      const R = all.filter((r) => r.productName.toLowerCase().includes(term.toLowerCase()));
+
+      renderKpis(all);
+
+      $("rows").innerHTML = R.length
+        ? R.map(renderRow).join("")
+        : '<tr><td colspan="9"><div class="empty">No restock requests yet.</div></td></tr>';
+    }
+
+    $("q").addEventListener("input", (e) => {
+      term = e.target.value;
+      render();
+    });
+
+    $("rows").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-review]");
+      if (!b) return;
+
+      const r = DHP.restockRequests().find((x) => x.id === b.dataset.review);
+      if (!r) return;
+
+      reviewing = r.id;
+      $("reviewTitle").textContent =
+        (DHP.role === "admin" ? "Admin review — " : "Owner final approval — ") + r.id;
+
+      const ownerRemarksLine =
+        DHP.role === "owner"
+          ? `<p class="muted sm mt">Admin remarks: ${DHP.esc(r.adminRemarks || "None")}</p>`
+          : "";
+
+      $("reviewInfo").innerHTML =
+        `<p><b>${DHP.esc(r.productName)}</b></p>` +
+        `<p class="muted sm mt">Current stock: ${r.currentStock} units, Requested: ${r.requestedQty} units</p>` +
+        `<p class="muted sm">Reason: ${DHP.esc(r.reason)}</p>` +
+        ownerRemarksLine;
+
+      $("reviewRemarks").value = "";
+      document.getElementById("reviewModal").classList.add("open");
+    });
+
+    function decide(outcome) {
+      const res = DHP.reviewRestock(reviewing, outcome, $("reviewRemarks").value);
+      if (!res.ok) return DHP.toast(res.error);
+
+      document.getElementById("reviewModal").classList.remove("open");
+      render();
+      DHP.toast(outcome === "approved" ? "Request approved" : "Request rejected");
+    }
+
+    $("reviewApprove").onclick = () => decide("approved");
+    $("reviewReject").onclick = () => decide("rejected");
+
+    render();
+  </script>
+</body>
+</html>

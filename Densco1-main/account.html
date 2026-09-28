@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>My account — Densco Health Products</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="hdr" id="siteHeader"></header>
+
+  <main class="page wrap">
+    <div class="page-head">
+      <div>
+        <h1>Order history and tracking</h1>
+        <p class="muted">Signed in as <b id="who"></b></p>
+      </div>
+      <a class="btn btn-red" href="catalog.html">Continue shopping</a>
+    </div>
+    <div id="orders"></div>
+  </main>
+
+  <footer class="ftr" id="siteFooter"></footer>
+
+  <script src="js/store.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/chatbot.js"></script>
+  <script>
+    const me = DHP.user();
+    document.getElementById("who").textContent = me;
+
+    const mine = DHP.orders().filter((o) => o.customer === me);
+
+    function trackSteps(o) {
+      return [
+        "Pending",
+        "Confirmed",
+        o.fulfillment === "Store Pickup" ? "Ready for pickup" : "Out for delivery",
+        "Completed"
+      ];
+    }
+
+    function renderTrack(steps, cur, status) {
+      return steps
+        .map((s, i) => {
+          const state = i < cur || status === "completed" ? "done" : i === cur ? "cur" : "";
+          return `<div class="st ${state}">${s}</div>`;
+        })
+        .join("");
+    }
+
+    function renderOrder(o) {
+      const steps = trackSteps(o);
+      const cur = ["pending", "confirmed", "shipped", "completed"].indexOf(o.status);
+
+      return (
+        `<div class="card order">` +
+          `<div class="order-top">` +
+            `<div>` +
+              `<h3>${o.id}</h3>` +
+              `<div class="muted sm">${o.date}, ${o.fulfillment}, paid by ${o.payment}</div>` +
+            `</div>` +
+            `<div class="right">` +
+              `<b style="font-size:17px;color:var(--ink)">${DHP.peso(o.total)}</b><br>` +
+              `<span class="badge ${o.status}">${DHP.statusLabel(o)}</span>` +
+            `</div>` +
+          `</div>` +
+          `<p class="mt">${DHP.esc(o.summary)}</p>` +
+          `<div class="track">${renderTrack(steps, cur, o.status)}</div>` +
+        `</div>`
+      );
+    }
+
+    document.getElementById("orders").innerHTML = mine.length
+      ? mine.map(renderOrder).join("")
+      : '<div class="card empty">You haven\'t placed an order yet. <a href="catalog.html">Browse the shop</a></div>';
+  </script>
+</body>
+</html>

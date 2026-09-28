@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sales & Records — Densco Staff Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body data-page="sales-records" data-roles="owner admin">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="app-main">
+      <main>
+        <div class="page-head">
+          <h1>Sales and records</h1>
+          <p class="muted">Consolidated online and walk-in transaction history.</p>
+        </div>
+
+        <div class="grid4" id="kpis"></div>
+
+        <div class="toolbar">
+          <input id="q" type="search" placeholder="Search receipt or order ID" />
+        </div>
+
+        <div class="card flush">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Receipt / Order #</th>
+                <th>Channel</th>
+                <th>Customer</th>
+                <th>Date</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Payment</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="../js/store.js"></script>
+  <script src="../js/staff-portal.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const S = DHP.sales();
+    let term = "";
+
+    const total = S.reduce((s, r) => s + r.total, 0);
+    const online = S.filter((r) => r.ch === "online").length;
+    const walk = S.filter((r) => r.ch === "walkin").length;
+
+    const kpis = [
+      ["Total transactions", S.length],
+      ["Online orders", online],
+      ["Walk-in sales", walk],
+      ["Total value", DHP.peso(total)]
+    ];
+
+    $("kpis").innerHTML = kpis
+      .map((k) => `<div class="kpi"><small>${k[0]}</small><b>${k[1]}</b></div>`)
+      .join("");
+
+    function renderRow(r) {
+      const channelLabel = r.ch === "online" ? "Online" : "Walk-In";
+      const channelBadgeClass = r.ch === "online" ? "online" : "";
+
+      return (
+        `<tr>` +
+        `<td><strong>${r.id}</strong></td>` +
+        `<td><span class="badge ${channelBadgeClass}">${channelLabel}</span></td>` +
+        `<td>${DHP.esc(r.who)}</td>` +
+        `<td>${r.date}</td>` +
+        `<td>${DHP.esc(r.items)}</td>` +
+        `<td>${DHP.peso(r.total)}</td>` +
+        `<td>${r.pay}</td>` +
+        `</tr>`
+      );
+    }
+
+    function render() {
+      const L = S.filter(
+        (r) =>
+          r.id.toLowerCase().includes(term.toLowerCase()) ||
+          r.who.toLowerCase().includes(term.toLowerCase())
+      );
+
+      $("rows").innerHTML = L.length
+        ? L.map(renderRow).join("")
+        : '<tr><td colspan="7"><div class="empty">No records match your search.</div></td></tr>';
+    }
+
+    $("q").addEventListener("input", (e) => {
+      term = e.target.value;
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
