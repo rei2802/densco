@@ -1,313 +1,104 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Restock — Densco Staff Portal</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
-    rel="stylesheet"
-  />
-  <link rel="stylesheet" href="../css/style.css" />
-</head>
-<body data-page="restock" data-roles="owner admin inventory">
-  <div class="app">
-    <aside class="sidebar" id="sidebar"></aside>
-    <div class="app-main">
-      <main>
-        <div class="page-head">
-          <div>
-            <h1>Restock</h1>
-            <p class="muted" id="pgSub">Products flagged by Inventory Staff for reordering.</p>
-          </div>
-        </div>
+<?php
+// Restock API (Admin only): lists products and records a restock, adding the
+// quantity to products.stock_quantity (the same value the shop displays).
+session_start();
 
-        <div class="grid4" id="kpis"></div>
+function json_out($code, $payload) {
+    http_response_code($code);
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode($payload);
+    exit;
+}
 
-        <div class="toolbar">
-          <input id="q" type="search" placeholder="Search product name" />
-        </div>
+$role = $_SESSION['staff_role'] ?? null;
+if (!$role) json_out(401, ['success' => false, 'error' => 'Please log in again.']);
+if ($role !== 'admin') json_out(403, ['success' => false, 'error' => 'Only the Administrator can restock.']);
 
-        <div class="card flush">
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th>Request</th>
-                <th>Product</th>
-                <th>Current Stock</th>
-                <th>Requested Qty</th>
-                <th>Reason</th>
-                <th>Requested By</th>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Remarks / Action</th>
-              </tr>
-            </thead>
-            <tbody id="rows"></tbody>
-          </table>
-        </div>
+$inTx = false;
 
-        <div class="card" data-roles="admin">
-          <p class="muted sm" style="margin-bottom:12px">Record stock received from a supplier. The shop quantity updates automatically.</p>
-          <button class="btn btn-red" id="openRestock">Restock</button>
-        </div>
+try {
+    require_once '../config.php';
 
-        <div class="modal" id="restockModal">
-          <div class="modal-box">
-            <div class="modal-head">
-              <h3>Restock</h3>
-              <button class="modal-x" data-close>&times;</button>
-            </div>
-            <div class="field">
-              <label for="rsSupplier">Supplier name</label>
-              <input id="rsSupplier" maxlength="150" autocomplete="off">
-            </div>
-            <div class="field">
-              <label for="rsProduct">Product name</label>
-              <select id="rsProduct"></select>
-            </div>
-            <div class="row2">
-              <div class="field">
-                <label for="rsQty">Quantity</label>
-                <input id="rsQty" type="number" min="1" step="1">
-              </div>
-              <div class="field">
-                <label for="rsDate">Date</label>
-                <input id="rsDate" type="date">
-              </div>
-            </div>
-            <div class="field">
-              <label for="rsNotes">Other info or notes</label>
-              <textarea id="rsNotes" rows="3" maxlength="1000"></textarea>
-            </div>
-            <p class="err" id="rsErr"></p>
-            <div class="flex" style="justify-content:flex-end">
-              <button class="btn btn-line" data-close>Cancel</button>
-              <button class="btn btn-red" id="rsSubmit">Submit</button>
-            </div>
-          </div>
-        </div>
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $in         = json_decode(file_get_contents('php://input'), true) ?: [];
+        $product_id = (int)($in['product_id'] ?? 0);
+        $supplier   = trim($in['supplier'] ?? '');
+        $quantity   = (int)($in['quantity'] ?? 0);
+        $date       = trim($in['date'] ?? '');
+        $notes      = trim($in['notes'] ?? '');
+        $staff_id   = (int)($_SESSION['staff_id'] ?? 0);
 
-        <div class="modal" id="reviewModal">
-          <div class="modal-box">
-            <div class="modal-head">
-              <h3 id="reviewTitle">Review request</h3>
-              <button class="modal-x" data-close>&times;</button>
-            </div>
-            <div id="reviewInfo"></div>
-            <div class="field mt">
-              <label>Remarks</label><textarea
-                id="reviewRemarks"
-                rows="3"
-                placeholder="Optional remarks"
-              ></textarea>
-            </div>
-            <div class="flex mt" style="justify-content: flex-end">
-              <button class="btn btn-line" data-close>Cancel</button
-              ><button
-                class="btn btn-line"
-                id="reviewReject"
-                style="border-color: #b91c1c; color: #b91c1c"
-              >Reject</button
-              ><button class="btn btn-red" id="reviewApprove">Approve</button>
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-  </div>
+        if ($product_id <= 0)                          json_out(400, ['success' => false, 'error' => 'Select a product.']);
+        if ($supplier === '' || strlen($supplier) > 150) json_out(400, ['success' => false, 'error' => 'Enter a supplier name (max 150 characters).']);
+        if ($quantity < 1 || $quantity > 1000000)      json_out(400, ['success' => false, 'error' => 'Quantity must be between 1 and 1,000,000.']);
+        $d = DateTime::createFromFormat('Y-m-d', $date);
+        if (!$d || $d->format('Y-m-d') !== $date)      json_out(400, ['success' => false, 'error' => 'Enter a valid date.']);
+        if (strlen($notes) > 1000)                     json_out(400, ['success' => false, 'error' => 'Notes are too long (max 1000 characters).']);
 
-  <script src="../js/store.js"></script>
-  <script src="../js/staff-portal.js"></script>
-  <script src="../js/restock.js"></script>
-  <script>
-    const $ = (id) => document.getElementById(id);
-    let term = "";
-    let reviewing = null;
+        // Restock history table (created automatically the first time)
+        $conn->query("CREATE TABLE IF NOT EXISTS restocks (
+            restock_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            product_id INT NOT NULL,
+            supplier_name VARCHAR(150) NOT NULL,
+            quantity INT NOT NULL,
+            restock_date DATE NOT NULL,
+            notes TEXT NULL,
+            staff_id INT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY product_id (product_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-    if (DHP.role === "admin") {
-      $("pgSub").textContent =
-        "Review pending requests, approve or reject, and add remarks before sending to the Owner.";
-    }
-    if (DHP.role === "owner") {
-      $("pgSub").textContent =
-        "Give final approval on admin-reviewed requests, and monitor full restock history.";
+        $conn->begin_transaction();
+        $inTx = true;
+
+        $stmt = $conn->prepare("SELECT product_name, stock_quantity FROM products WHERE product_id = ? AND hidden = 0 FOR UPDATE");
+        $stmt->bind_param("i", $product_id);
+        $stmt->execute();
+        $p = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        if (!$p) {
+            $conn->rollback();
+            json_out(404, ['success' => false, 'error' => 'Product not found.']);
+        }
+
+        $stmt = $conn->prepare("UPDATE products SET stock_quantity = stock_quantity + ? WHERE product_id = ?");
+        $stmt->bind_param("ii", $quantity, $product_id);
+        $stmt->execute();
+        $stmt->close();
+
+        $stmt = $conn->prepare("INSERT INTO restocks (product_id, supplier_name, quantity, restock_date, notes, staff_id) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("isissi", $product_id, $supplier, $quantity, $date, $notes, $staff_id);
+        $stmt->execute();
+        $stmt->close();
+
+        $conn->commit();
+        $inTx = false;
+
+        json_out(200, [
+            'success' => true,
+            'product' => $p['product_name'],
+            'stock'   => (int)$p['stock_quantity'] + $quantity,
+        ]);
     }
 
-    function renderKpis(all) {
-      const pend = all.filter((r) => r.status === "pending").length;
-      const adm = all.filter((r) => r.status === "admin_approved").length;
-      const appr = all.filter((r) => r.status === "approved").length;
-      const rej = all.filter((r) => r.status === "rejected").length;
-
-      const kpis = [
-        ["Pending admin review", pend],
-        ["Pending owner approval", adm],
-        ["Approved", appr],
-        ["Rejected", rej]
-      ];
-
-      $("kpis").innerHTML = kpis
-        .map((k) => `<div class="kpi"><small>${k[0]}</small><b>${k[1]}</b></div>`)
-        .join("");
+    // Product list for the form: the same products currently listed in the shop (hidden = 0)
+    if (isset($_GET['products'])) {
+        $products = [];
+        $res = $conn->query("SELECT product_id, product_name, category, stock_quantity FROM products WHERE hidden = 0 ORDER BY product_name, product_id");
+        while ($r = $res->fetch_assoc()) {
+            $products[] = [
+                'id'    => (int)$r['product_id'],
+                'name'  => $r['product_name'],
+                'cat'   => $r['category'],
+                'stock' => (int)$r['stock_quantity'],
+            ];
+        }
+        json_out(200, ['success' => true, 'products' => $products]);
     }
 
-    function actionCell(r) {
-      if (DHP.canReviewRestock(r)) {
-        return `<button class="btn btn-line btn-sm" data-review="${r.id}">Review</button>`;
-      }
-      if (r.status === "pending") {
-        return '<span class="muted sm">Awaiting Admin</span>';
-      }
-      if (r.status === "admin_approved") {
-        return '<span class="muted sm">Awaiting Owner</span>';
-      }
-      return `<span class="muted sm">${DHP.esc(r.ownerRemarks || r.adminRemarks || "No remarks")}</span>`;
-    }
-
-    function renderRow(r) {
-      const b = DHP.restockBadge(r.status);
-      const act = actionCell(r);
-
-      return (
-        `<tr>` +
-        `<td><strong>${r.id}</strong></td>` +
-        `<td>${DHP.esc(r.productName)}</td>` +
-        `<td>${r.currentStock} units</td>` +
-        `<td>${r.requestedQty} units</td>` +
-        `<td>${DHP.esc(r.reason)}</td>` +
-        `<td>${r.requestedBy}</td>` +
-        `<td>${r.date}</td>` +
-        `<td><span class="badge ${b[0]}">${b[1]}</span></td>` +
-        `<td class="acts">${act}</td>` +
-        `</tr>`
-      );
-    }
-
-    function render() {
-      const all = DHP.restockRequests();
-      const R = all.filter((r) => r.productName.toLowerCase().includes(term.toLowerCase()));
-
-      renderKpis(all);
-
-      $("rows").innerHTML = R.length
-        ? R.map(renderRow).join("")
-        : '<tr><td colspan="9"><div class="empty">No restock requests yet.</div></td></tr>';
-    }
-
-    $("q").addEventListener("input", (e) => {
-      term = e.target.value;
-      render();
-    });
-
-    $("rows").addEventListener("click", (e) => {
-      const b = e.target.closest("[data-review]");
-      if (!b) return;
-
-      const r = DHP.restockRequests().find((x) => x.id === b.dataset.review);
-      if (!r) return;
-
-      reviewing = r.id;
-      $("reviewTitle").textContent =
-        (DHP.role === "admin" ? "Admin review — " : "Owner final approval — ") + r.id;
-
-      const ownerRemarksLine =
-        DHP.role === "owner"
-          ? `<p class="muted sm mt">Admin remarks: ${DHP.esc(r.adminRemarks || "None")}</p>`
-          : "";
-
-      $("reviewInfo").innerHTML =
-        `<p><b>${DHP.esc(r.productName)}</b></p>` +
-        `<p class="muted sm mt">Current stock: ${r.currentStock} units, Requested: ${r.requestedQty} units</p>` +
-        `<p class="muted sm">Reason: ${DHP.esc(r.reason)}</p>` +
-        ownerRemarksLine;
-
-      $("reviewRemarks").value = "";
-      document.getElementById("reviewModal").classList.add("open");
-    });
-
-    function decide(outcome) {
-      const res = DHP.reviewRestock(reviewing, outcome, $("reviewRemarks").value);
-      if (!res.ok) return DHP.toast(res.error);
-
-      document.getElementById("reviewModal").classList.remove("open");
-      render();
-      DHP.toast(outcome === "approved" ? "Request approved" : "Request rejected");
-    }
-
-    $("reviewApprove").onclick = () => decide("approved");
-    $("reviewReject").onclick = () => decide("rejected");
-
-
-    // ---- Admin restock form: adds to the product's stock in the database (shop reads the same value)
-    $("openRestock").onclick = async () => {
-      $("rsErr").textContent = "";
-      $("rsSupplier").value = "";
-      $("rsQty").value = "";
-      $("rsNotes").value = "";
-      $("rsDate").value = new Date().toLocaleDateString("en-CA");
-      $("rsProduct").innerHTML = '<option value="">Loading products...</option>';
-      document.getElementById("restockModal").classList.add("open");
-
-      try {
-        const r = await fetch("restock.php?products=1", { credentials: "same-origin" });
-        if (r.status === 401) { location.href = "login.php"; return; }
-        const d = await r.json();
-        if (!d.success) throw new Error(d.error);
-        $("rsProduct").innerHTML =
-          '<option value="">Select a product</option>' +
-          d.products
-            .map((p) => `<option value="${p.id}">${DHP.esc(p.name)} (${DHP.esc(p.cat || "")}, ID ${p.id}) - ${p.stock} in stock</option>`)
-            .join("");
-      } catch (e) {
-        $("rsProduct").innerHTML = '<option value="">Select a product</option>';
-        $("rsErr").textContent = "Could not load products. Please close and try again.";
-      }
-    };
-
-    $("rsSubmit").onclick = async () => {
-      const err = $("rsErr");
-      err.textContent = "";
-
-      const supplier = $("rsSupplier").value.trim();
-      const pid = +$("rsProduct").value;
-      const qty = Math.floor(+$("rsQty").value);
-      const date = $("rsDate").value;
-
-      if (!supplier) { err.textContent = "Enter the supplier name."; return; }
-      if (!pid) { err.textContent = "Select a product."; return; }
-      if (!qty || qty < 1) { err.textContent = "Enter a quantity of at least 1."; return; }
-      if (!date) { err.textContent = "Select the date."; return; }
-
-      $("rsSubmit").disabled = true;
-      try {
-        const r = await fetch("restock.php", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            product_id: pid,
-            supplier: supplier,
-            quantity: qty,
-            date: date,
-            notes: $("rsNotes").value.trim()
-          })
-        });
-        if (r.status === 401) { location.href = "login.php"; return; }
-        const d = await r.json();
-        if (!d.success) { err.textContent = d.error || "Could not save the restock."; return; }
-
-        document.getElementById("restockModal").classList.remove("open");
-        DHP.toast(d.product + " now has " + d.stock + " units in the shop");
-      } catch (e) {
-        err.textContent = "Something went wrong. Please try again.";
-      } finally {
-        $("rsSubmit").disabled = false;
-      }
-    };
-
-    render();
-  </script>
-</body>
-</html>
+    json_out(400, ['success' => false, 'error' => 'Invalid request.']);
+} catch (Throwable $e) {
+    if ($inTx) { try { $conn->rollback(); } catch (Throwable $x) {} }
+    json_out(500, ['success' => false, 'error' => 'Server error.']);
+}
