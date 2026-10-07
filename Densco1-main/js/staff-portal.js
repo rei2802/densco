@@ -22,10 +22,10 @@
     ["dashboard", "Dashboard", "owner admin inventory"],
     ["orders", "Orders", "owner admin"],
     ["inventory", "Inventory", "owner admin inventory"],
-    ["restock", "Restock Requests", "owner admin inventory"],
+    ["restock", "Restock", "owner admin inventory"],
     ["inquiries", "Inquiries", "admin"],
     ["sales-records", "Sales & Records", "owner admin"],
-    ["staff", "Staff Accounts", "owner admin"],
+    ["staff", "Manage Accounts", "owner admin"],
     ["reports", "Reports", "owner"],
     ["settings", "Settings", "owner"]
   ];

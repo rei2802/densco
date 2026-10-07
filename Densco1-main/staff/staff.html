@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Staff Accounts — Densco Staff Portal</title>
+  <title>Manage Accounts — Densco Staff Portal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link
     href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
@@ -17,28 +17,27 @@
     <div class="app-main">
       <main>
         <div class="page-head">
-          <h1>Staff accounts</h1>
-          <p class="muted">Manage who can access the admin portal.</p>
+          <h1>Manage accounts</h1>
+          <p class="muted">All currently active accounts across every role.</p>
         </div>
 
         <div class="card">
-          <h3>Inventory staff</h3>
-          <div class="list" id="inv"></div>
+          <h3>Active accounts (<span id="count">0</span>)</h3>
+          <div class="list" id="accts"><div class="empty">Loading accounts...</div></div>
         </div>
 
-        <div class="card" data-roles="owner">
-          <h3>Administrators</h3>
-          <div class="list" id="adm"></div>
-        </div>
-
-        <div class="card" data-roles="owner">
-          <h3>Ownership</h3>
-          <div class="list">
-            <div class="row">
-              <span
-                ><b>Owner account and ownership controls</b
-                ><span class="muted">Not transferable from this screen</span></span
-              ><span class="badge">Owner only</span>
+        <div class="modal" id="acctModal">
+          <div class="modal-box">
+            <div class="modal-head">
+              <h3>Account details</h3>
+              <button class="modal-x" data-close>&times;</button>
+            </div>
+            <div id="acctInfo"></div>
+            <p class="muted sm mt" id="acctNote"></p>
+            <p class="err mt" id="acctErr"></p>
+            <div class="flex mt" style="justify-content:flex-end">
+              <button class="btn btn-line" data-close>Close</button>
+              <button class="btn btn-red" id="acctDelete">Delete account</button>
             </div>
           </div>
         </div>
@@ -51,40 +50,117 @@
   <script>
     DHP.applyRoles(document);
 
-    const inv = [
-      ["J. Ramirez", "Inventory Staff"],
-      ["A. Bautista", "Inventory Staff"]
-    ];
-    const adm = [["R. Villanueva", "Administrator"]];
+    const $ = (id) => document.getElementById(id);
+    const LABEL = { owner: "Business Owner", admin: "Administrator", inventory: "Inventory Staff" };
+    let ACCOUNTS = [];
+    let ME = 0;
+    let selected = null;
 
-    function renderStaffRow(s) {
+    function renderRow(a) {
       return (
         `<div class="row">` +
-          `<span><b>${s[0]}</b><span class="muted">${s[1]}, active</span></span>` +
+          `<span><b>${DHP.esc(a.name)}</b><span class="muted">${DHP.esc(LABEL[a.role] || a.role)}, ${DHP.esc(a.email)}</span></span>` +
           `<span class="flex">` +
             `<span class="badge in">Active</span>` +
-            `<button class="btn btn-line btn-sm">Manage</button>` +
+            `<button class="btn btn-line btn-sm" data-manage="${a.id}">Manage</button>` +
           `</span>` +
         `</div>`
       );
     }
 
-    function renderAddRow(label, hint) {
-      return (
-        `<div class="row">` +
-          `<span><b>${label}</b><span class="muted">${hint}</span></span>` +
-          `<button class="btn btn-red btn-sm">Add staff</button>` +
-        `</div>`
-      );
+    function render() {
+      $("count").textContent = ACCOUNTS.length;
+      $("accts").innerHTML = ACCOUNTS.length
+        ? ACCOUNTS.map(renderRow).join("")
+        : '<div class="empty">No accounts found.</div>';
     }
 
-    document.getElementById("inv").innerHTML =
-      inv.map(renderStaffRow).join("") +
-      renderAddRow("Add inventory staff", "Create a new inventory staff login");
+    function load() {
+      return fetch("accounts.php?json=1", { credentials: "same-origin" })
+        .then((r) => {
+          if (r.status === 401) {
+            location.href = "login.php";
+            return null;
+          }
+          return r.json();
+        })
+        .then((d) => {
+          if (!d) return;
+          if (!d.success) throw new Error(d.error);
+          ACCOUNTS = d.accounts;
+          ME = d.me;
+          render();
+        })
+        .catch(() => {
+          $("accts").innerHTML = '<div class="empty">Could not load accounts. Please refresh.</div>';
+        });
+    }
 
-    document.getElementById("adm").innerHTML =
-      adm.map(renderStaffRow).join("") +
-      renderAddRow("Add administrator", "Create a new administrator login");
+    function detailRow(label, value) {
+      return `<div class="row"><span class="muted">${label}</span><b>${DHP.esc(value)}</b></div>`;
+    }
+
+    $("accts").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-manage]");
+      if (!b) return;
+
+      const a = ACCOUNTS.find((x) => String(x.id) === b.dataset.manage);
+      if (!a) return;
+      selected = a;
+
+      $("acctInfo").innerHTML =
+        '<div class="list">' +
+        detailRow("Name", a.name) +
+        detailRow("Email", a.email) +
+        detailRow("Role", LABEL[a.role] || a.role) +
+        detailRow("Status", "Active") +
+        detailRow("Created", a.created) +
+        "</div>";
+
+      $("acctErr").textContent = "";
+      const isSelf = a.id === ME;
+      const isOwner = a.role === "owner";
+      $("acctDelete").disabled = isSelf || isOwner;
+      $("acctNote").textContent = isSelf
+        ? "You can't delete the account you are signed in with."
+        : isOwner
+          ? "The owner account can't be deleted."
+          : "";
+
+      $("acctModal").classList.add("open");
+    });
+
+    $("acctDelete").onclick = async () => {
+      if (!selected) return;
+      if (!confirm("Delete the account of " + selected.name + "? This can't be undone.")) return;
+
+      $("acctErr").textContent = "";
+      try {
+        const r = await fetch("accounts.php", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "delete", id: selected.id })
+        });
+        if (r.status === 401) {
+          location.href = "login.php";
+          return;
+        }
+        const d = await r.json();
+        if (!d.success) {
+          $("acctErr").textContent = d.error || "Could not delete the account.";
+          return;
+        }
+        $("acctModal").classList.remove("open");
+        DHP.toast("Account deleted");
+        selected = null;
+        load();
+      } catch (err) {
+        $("acctErr").textContent = "Something went wrong. Please try again.";
+      }
+    };
+
+    load();
   </script>
 </body>
 </html>
