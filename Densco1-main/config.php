@@ -1,4 +1,3 @@
-```php
 <?php
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
@@ -24,11 +23,9 @@ if ($databaseUrl) {
 
     $host = $db['host'] ?? 'localhost';
     $port = $db['port'] ?? 3306;
-    $user = $db['user'] ?? 'root';
-    $pass = $db['pass'] ?? '';
-    $name = isset($db['path'])
-        ? ltrim($db['path'], '/')
-        : 'densco_db';
+    $user = isset($db['user']) ? urldecode($db['user']) : 'root';
+    $pass = isset($db['pass']) ? urldecode($db['pass']) : '';
+    $name = isset($db['path']) ? ltrim($db['path'], '/') : 'densco_db';
 
 } else {
     // XAMPP / Local MySQL settings
@@ -52,4 +49,3 @@ $conn = new mysqli(
 // Set UTF-8
 $conn->set_charset("utf8mb4");
 ?>
-```
