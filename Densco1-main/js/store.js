@@ -95,83 +95,10 @@
     };
   };
 
-  var PRODUCTS = [
-    {
-      id: 1,
-      name: "Digital Blood Pressure Monitor",
-      cat: "Diagnostics",
-      price: 1850,
-      stock: 46,
-      desc: "Automatic upper-arm monitor for clinic and home use, with irregular heartbeat detection, dual-user memory and a large backlit display.",
-    },
-    {
-      id: 2,
-      name: "Disposable Surgical Gloves (Box of 100)",
-      cat: "PPE",
-      price: 450,
-      stock: 120,
-      desc: "Powder-free disposable gloves for clinical, laboratory and general medical use.",
-    },
-    {
-      id: 3,
-      name: "Folding Wheelchair \u2014 Standard",
-      cat: "Mobility Aids",
-      price: 4200,
-      stock: 18,
-      desc: "Lightweight foldable wheelchair with padded seat, footrests and hand brakes.",
-    },
-    {
-      id: 4,
-      name: "N95 Medical Respirator (Pack of 10)",
-      cat: "PPE",
-      price: 650,
-      stock: 3,
-      desc: "N95-rated respirators with an adjustable nose clip for high-filtration protection.",
-    },
-    {
-      id: 5,
-      name: "Digital Clinical Thermometer",
-      cat: "Diagnostics",
-      price: 320,
-      stock: 9,
-      desc: "Fast-read digital thermometer with fever alert and memory recall.",
-    },
-    {
-      id: 6,
-      name: "Isopropyl Alcohol 70% (1 Liter)",
-      cat: "Consumables",
-      price: 95,
-      stock: 4,
-      desc: "70% isopropyl alcohol for surface and skin disinfection.",
-    },
-    {
-      id: 7,
-      name: "3-Ply Surgical Face Masks (Box of 50)",
-      cat: "PPE",
-      price: 150,
-      stock: 60,
-      desc: "Three-layer disposable masks with elastic ear loops.",
-    },
-    {
-      id: 8,
-      name: "Fingertip Pulse Oximeter",
-      cat: "Diagnostics",
-      price: 990,
-      stock: 25,
-      desc: "Compact oximeter showing SpO2 and pulse rate on an OLED display.",
-    },
-  ];
-  // D.products() now prefers live database data injected by PHP pages
-  // (catalog.php / product.php / cart.php set window.DHP_PRODUCTS before this script runs).
-  // Pages not yet converted to .php (like index.html) still fall back to the old localStorage copy.
+  // Products always come from the database: each PHP page sets window.DHP_PRODUCTS
+  // before this script runs. Pages without it get an empty list (no fake placeholder data).
   D.products = function () {
-    if (window.DHP_PRODUCTS) return window.DHP_PRODUCTS;
-    var p = get("denscoProducts", null);
-    if (!p) {
-      p = PRODUCTS;
-      put("denscoProducts", p);
-    }
-    return p;
+    return window.DHP_PRODUCTS || [];
   };
   D.saveProducts = function (p) {
     put("denscoProducts", p);

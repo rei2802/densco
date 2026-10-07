@@ -1,3 +1,20 @@
+<?php
+require_once 'config.php';
+
+$products = [];
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path FROM products WHERE hidden = 0");
+while ($row = $res->fetch_assoc()) {
+    $products[] = [
+        "id"    => (int)$row["product_id"],
+        "name"  => $row["product_name"],
+        "cat"   => $row["category"],
+        "price" => (float)$row["price"],
+        "stock" => (int)$row["stock_quantity"],
+        "desc"  => $row["description"],
+        "image" => $row["image_path"] ?: null,
+    ];
+}
+?>
 <!doctype html>
 <html lang="en">
   <head>
@@ -44,6 +61,7 @@
       <div class="grid4" id="biz"></div>
     </main>
     <footer class="ftr" id="siteFooter"></footer>
+    <script>window.DHP_PRODUCTS = <?php echo json_encode($products); ?>;</script>
     <script src="js/store.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/chatbot.js"></script>

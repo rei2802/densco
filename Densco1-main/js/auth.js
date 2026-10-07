@@ -1,7 +1,7 @@
 (function () {
   "use strict";
   var D = window.DHP;
-  var page = location.pathname.split("/").pop() || "index.html";
+  var page = location.pathname.split("/").pop() || "index.php";
   var user = D.user();
 
   if ((page === "cart.php" || page === "account.html") && !user) {
@@ -10,7 +10,7 @@
   }
 
   var links = [
-    ["index.html", "Home"],
+    ["index.php", "Home"],
     ["catalog.php", "Shop"],
   ];
   if (user) links.push(["cart.php", "Cart"], ["account.html", "My Account"]);
@@ -44,7 +44,7 @@
   var h = document.getElementById("siteHeader");
   if (h)
     h.innerHTML =
-      '<div class="wrap hdr-in"><a class="brand" href="index.html"><img class="logo" src="assets/logonobg.png" alt="Densco Health Products logo"><span class="brand-t"><b>DENSCO</b><i>HEALTH PRODUCTS</i></span></a><button class="menu-btn" id="menuBtn">Menu</button><nav class="nav" id="nav">' +
+      '<div class="wrap hdr-in"><a class="brand" href="index.php"><img class="logo" src="assets/logonobg.png" alt="Densco Health Products logo"><span class="brand-t"><b>DENSCO</b><i>HEALTH PRODUCTS</i></span></a><button class="menu-btn" id="menuBtn">Menu</button><nav class="nav" id="nav">' +
       nav +
       "</nav></div>";
 
@@ -74,7 +74,7 @@
     lo.addEventListener("click", function (e) {
       e.preventDefault();
       D.logout();
-      location.href = "index.html";
+      location.href = "index.php";
     });
 
   function go() {

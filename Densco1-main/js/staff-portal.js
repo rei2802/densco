@@ -136,7 +136,7 @@
     '<div class="side-foot">' +
       '<div><small>Signed in as</small><b>' + ROLES[role] + '</b></div>' +
       '<a href="login.php" id="staffLogout">Log Out</a>' +
-      '<a class="tiny" href="../index.html">Back to main website</a>' +
+      '<a class="tiny" href="../index.php">Back to main website</a>' +
     '</div>';
 
   document.getElementById("staffLogout").addEventListener("click", function (e) {

@@ -2,7 +2,7 @@
 require_once 'config.php';
 
 $products = [];
-$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path FROM products");
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path FROM products WHERE hidden = 0");
 while ($row = $res->fetch_assoc()) {
     $products[] = [
         "id"    => (int)$row["product_id"],
@@ -30,7 +30,7 @@ while ($row = $res->fetch_assoc()) {
 
   <main class="page wrap">
 
-    <div class="crumb"><a href="index.html">Home</a> / <a href="catalog.php">Shop</a> / <span id="crumbName">Product</span></div>
+    <div class="crumb"><a href="index.php">Home</a> / <a href="catalog.php">Shop</a> / <span id="crumbName">Product</span></div>
     <div class="card" id="pd"></div>
 
   </main>

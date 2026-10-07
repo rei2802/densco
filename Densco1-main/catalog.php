@@ -4,7 +4,7 @@ require_once 'config.php';
 // Fetch all products from the database and shape them to match
 // the {id, name, cat, price, stock, desc} shape the front-end JS expects.
 $products = [];
-$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path FROM products");
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path FROM products WHERE hidden = 0");
 while ($row = $res->fetch_assoc()) {
     $products[] = [
         "id"    => (int)$row["product_id"],
@@ -32,7 +32,7 @@ while ($row = $res->fetch_assoc()) {
 
   <main class="page wrap">
 
-    <div class="crumb"><a href="index.html">Home</a> / <span>Shop</span></div>
+    <div class="crumb"><a href="index.php">Home</a> / <span>Shop</span></div>
 
     <div class="shop">
       <aside class="card side">
