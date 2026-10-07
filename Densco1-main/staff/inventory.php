@@ -49,6 +49,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $action = $data['action'] ?? '';
     }
 
+    // Allowed product categories (keep in sync with DHP.categories in js/store.js)
+    $ALLOWED_CATEGORIES = [
+        'Stretcher / Ambulance',
+        'Table',
+        'Cart',
+        'Lighting',
+        'Panel Screen',
+        'Stool',
+        'Sink',
+        'OB Accessory',
+        'Oxygen Cart',
+        'Oxygen Holder',
+        'Basin/Pail',
+        'Negatoscope',
+        'Stretcher',
+        'Mayo Stand',
+        'Mayo Tray',
+        'Cabinet',
+        'Food Conveyor',
+        'Hospital Bed',
+        'OB/Delivery Table',
+        'Chair',
+        'Bedpan',
+        'Chart Holder',
+        'IV Stand',
+        'Bucket',
+        'Hamper',
+        'Sterilizer',
+        'Baby Bassinet',
+        'Baby Crib'
+    ];
+
     if ($action === 'adjust') {
         $id = intval($data['id'] ?? 0);
         $delta = intval($data['delta'] ?? 0);
@@ -69,6 +101,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $price  = floatval($data['price'] ?? 0);
         $desc   = trim($data['desc'] ?? '');
         $hidden = !empty($data['hidden']) ? 1 : 0;
+
+        if (!in_array($cat, $ALLOWED_CATEGORIES, true)) {
+            echo json_encode(['success' => false, 'error' => 'Please choose a category from the list.']);
+            exit;
+        }
 
         if ($name === '') {
             echo json_encode(['success' => false, 'error' => 'Product name is required.']);
@@ -115,6 +152,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $price = floatval($data['price'] ?? 0);
         $stock = intval($data['stock'] ?? 0);
         $desc  = trim($data['desc'] ?? '') ?: 'No description yet.';
+
+        if (!in_array($cat, $ALLOWED_CATEGORIES, true)) {
+            echo json_encode(['success' => false, 'error' => 'Please choose a category from the list.']);
+            exit;
+        }
 
         if ($name === '') {
             echo json_encode(['success' => false, 'error' => 'Enter a product name.']);

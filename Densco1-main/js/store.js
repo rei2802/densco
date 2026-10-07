@@ -47,7 +47,36 @@
     }, 2600);
   };
 
-  D.categories = ["Diagnostics", "PPE", "Mobility Aids", "Consumables"];
+  D.categories = [
+    "Stretcher / Ambulance",
+    "Table",
+    "Cart",
+    "Lighting",
+    "Panel Screen",
+    "Stool",
+    "Sink",
+    "OB Accessory",
+    "Oxygen Cart",
+    "Oxygen Holder",
+    "Basin/Pail",
+    "Negatoscope",
+    "Stretcher",
+    "Mayo Stand",
+    "Mayo Tray",
+    "Cabinet",
+    "Food Conveyor",
+    "Hospital Bed",
+    "OB/Delivery Table",
+    "Chair",
+    "Bedpan",
+    "Chart Holder",
+    "IV Stand",
+    "Bucket",
+    "Hamper",
+    "Sterilizer",
+    "Baby Bassinet",
+    "Baby Crib"
+  ];
   D.settings = function () {
     var s = get("denscoSettings", {});
     s.lowStock = +s.lowStock || 10;
