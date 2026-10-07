@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <div class="login-wrap">
     <div class="auth-box">
-      <a class="brand center" href="../index.html">...</a>
+      <a class="brand center" href="../index.html"><img class="logo" src="../assets/logonobg.png" alt="Densco Health Products logo"><span class="brand-t"><b>DENSCO</b><i>HEALTH PRODUCTS</i></span></a>
       <h2>Staff log in</h2>
       <p class="muted">Internal access for owner, administrator and inventory staff.</p>
 
@@ -55,7 +55,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="field">
           <label for="r">Role</label>
           <select id="r" name="role">
-            <option value="owner">...</option>
+            <option value="owner">Business Owner</option>
+            <option value="admin">Administrator</option>
+            <option value="inventory">Inventory Staff</option>
           </select>
         </div>
 
