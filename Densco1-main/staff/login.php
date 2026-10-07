@@ -2,6 +2,13 @@
 require_once '../config.php';
 session_start();
 
+// Log out: clear the staff session, then show the login page again
+if (isset($_GET['logout'])) {
+    unset($_SESSION['staff_id'], $_SESSION['staff_name'], $_SESSION['staff_role']);
+    header('Location: login.php');
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
 

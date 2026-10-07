@@ -32,7 +32,7 @@
 
   // Pages converted to real PHP/database pages so far. Anything not listed here
   // still defaults to .html. Add to this list as more staff pages get converted.
-  var PHP_PAGES = { inventory: true };
+  var PHP_PAGES = { inventory: true, orders: true };
 
   function ext(key) {
     return PHP_PAGES[key] ? ".php" : ".html";
@@ -66,14 +66,44 @@
     var f = document.getElementById("staffLogin");
     f.addEventListener("submit", function (e) {
       e.preventDefault();
+      var err = document.getElementById("formErr");
+      var u = f.elements.user.value.trim(),
+        p = f.elements.pw.value;
 
-      if (!f.elements.user.value.trim() || !f.elements.pw.value) {
-        document.getElementById("formErr").textContent = "Enter your staff email or username and your password.";
+      if (!u || !p) {
+        err.textContent = "Enter your staff email or username and your password.";
         return;
       }
+      err.textContent = "";
 
-      D.put("denscoStaffRole", f.elements.role.value);
-      location.href = "dashboard.html";
+      fetch("login.php", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user: u, pw: p })
+      })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (data) {
+          if (!data.success) {
+            err.textContent = data.error || "Login failed. Please try again.";
+            return;
+          }
+          if (!ROLES[data.role]) {
+            err.textContent = "This account does not have a valid staff role.";
+            return;
+          }
+          if (data.role !== f.elements.role.value) {
+            err.textContent = "This is not a " + ROLES[f.elements.role.value] + " account.";
+            return;
+          }
+          D.put("denscoStaffRole", data.role);
+          location.href = "dashboard.html";
+        })
+        .catch(function () {
+          err.textContent = "Something went wrong. Please try again.";
+        });
     });
     return;
   }
@@ -114,7 +144,7 @@
     try {
       localStorage.removeItem("denscoStaffRole");
     } catch (x) {}
-    location.href = "login.php";
+    location.href = "login.php?logout=1";
   });
 
   document.querySelector(".app-main").insertAdjacentHTML(

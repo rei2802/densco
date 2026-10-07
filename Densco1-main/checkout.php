@@ -1,6 +1,7 @@
 <?php
 header("Content-Type: application/json");
 include "config.php";
+session_start();
 
 try {
     // Get JSON data from JavaScript
@@ -21,9 +22,6 @@ try {
     $items       = $data["items"] ?? [];
 
     // Basic validation
-    if ($customer === "") {
-        throw new Exception("Customer is required.");
-    }
     if ($total <= 0) {
         throw new Exception("Invalid order total.");
     }
@@ -31,18 +29,18 @@ try {
         throw new Exception("Your cart is empty.");
     }
 
-    // Find the customer's user_id
-    $stmt = $conn->prepare("SELECT user_id FROM users WHERE full_name = ? LIMIT 1");
-    $stmt->bind_param("s", $customer);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    if ($result->num_rows === 0) {
-        throw new Exception("Customer account not found.");
+    // The order belongs to the customer who is logged in (checked on the server)
+    $user_id = (int)($_SESSION["user_id"] ?? 0);
+    if ($user_id <= 0) {
+        throw new Exception("Your session expired. Please log out, log in again, then place your order.");
     }
 
-    $user = $result->fetch_assoc();
-    $user_id = $user["user_id"];
+    $stmt = $conn->prepare("SELECT user_id FROM users WHERE user_id = ? LIMIT 1");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    if ($stmt->get_result()->num_rows === 0) {
+        throw new Exception("Customer account not found. Please log in again.");
+    }
     $stmt->close();
 
     // Start transaction
@@ -113,7 +111,7 @@ try {
     // Save everything (order + order_items + stock decrement) together
     $conn->commit();
 
-    echo json_encode(["success" => true, "order_id" => $order_id]);
+    echo json_encode(["success" => true, "order_id" => "DHP-" . str_pad((string)$order_id, 5, "0", STR_PAD_LEFT)]);
 } catch (Exception $e) {
     $conn->rollback();
     echo json_encode(["success" => false, "error" => $e->getMessage()]);

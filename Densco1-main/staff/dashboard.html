@@ -55,7 +55,7 @@
         lowP = P.filter((p) => DHP.state(p) !== "in");
       const revenue = DHP.sales().reduce((s, r) => s + r.total, 0);
       let kpis = [
-        ["Active orders", active, "orders.html"],
+        ["Active orders", active, "orders.php"],
         ["Products", P.length + " items", "inventory.php"],
         ["Low stock alerts", lowP.length, "inventory.php"],
       ];
@@ -94,6 +94,25 @@
             .join("") +
           "</div>"
         : '<p class="muted">All products are adequately stocked.</p>';
+      // Real order numbers from the database
+      fetch("orders.php?summary=1", { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!d || !d.success) return;
+          const k = document.querySelector("#kpis .kpi b");
+          if (k) k.textContent = d.active;
+          document.getElementById("recent").innerHTML = d.recent.length
+            ? '<div class="list">' +
+              d.recent
+                .map(
+                  (o) =>
+                    `<div class="row"><span><b>${DHP.esc(o.id)}</b><br><span class="muted">${DHP.esc(o.customer)}, ${DHP.esc(o.date)}</span></span><span class="badge ${o.status}">${DHP.statusLabel(o)}</span></div>`,
+                )
+                .join("") +
+              "</div>"
+            : '<p class="muted">No orders yet.</p>';
+        })
+        .catch(() => {});
     </script>
   </body>
 </html>

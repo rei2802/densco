@@ -20,7 +20,7 @@
         <h1>Order history and tracking</h1>
         <p class="muted">Signed in as <b id="who"></b></p>
       </div>
-      <a class="btn btn-red" href="catalog.html">Continue shopping</a>
+      <a class="btn btn-red" href="catalog.php">Continue shopping</a>
     </div>
     <div id="orders"></div>
   </main>
@@ -33,8 +33,6 @@
   <script>
     const me = DHP.user();
     document.getElementById("who").textContent = me;
-
-    const mine = DHP.orders().filter((o) => o.customer === me);
 
     function trackSteps(o) {
       return [
@@ -62,8 +60,8 @@
         `<div class="card order">` +
           `<div class="order-top">` +
             `<div>` +
-              `<h3>${o.id}</h3>` +
-              `<div class="muted sm">${o.date}, ${o.fulfillment}, paid by ${o.payment}</div>` +
+              `<h3>${DHP.esc(o.id)}</h3>` +
+              `<div class="muted sm">${DHP.esc(o.date)}, ${DHP.esc(o.fulfillment)}, paid by ${DHP.esc(o.payment)}</div>` +
             `</div>` +
             `<div class="right">` +
               `<b style="font-size:17px;color:var(--ink)">${DHP.peso(o.total)}</b><br>` +
@@ -76,9 +74,29 @@
       );
     }
 
-    document.getElementById("orders").innerHTML = mine.length
-      ? mine.map(renderOrder).join("")
-      : '<div class="card empty">You haven\'t placed an order yet. <a href="catalog.html">Browse the shop</a></div>';
+    const box = document.getElementById("orders");
+    box.innerHTML = '<div class="card empty">Loading your orders...</div>';
+
+    fetch("my_orders.php", { credentials: "same-origin" })
+      .then((r) => {
+        if (r.status === 401) {
+          // Server session ended: sign out locally and ask the customer to log in again
+          DHP.logout();
+          location.replace("login.php?next=account.html");
+          return null;
+        }
+        return r.json();
+      })
+      .then((d) => {
+        if (!d) return;
+        if (!d.success) throw new Error(d.error);
+        box.innerHTML = d.orders.length
+          ? d.orders.map(renderOrder).join("")
+          : '<div class="card empty">You haven\'t placed an order yet. <a href="catalog.php">Browse the shop</a></div>';
+      })
+      .catch(() => {
+        box.innerHTML = '<div class="card empty">Could not load your orders. Please refresh the page.</div>';
+      });
   </script>
 </body>
 </html>
