@@ -1,8 +1,7 @@
 FROM php:8.2-apache
 
-# Ensure only mpm_prefork is enabled
-RUN a2dismod mpm_event mpm_worker || true \
-    && a2enmod mpm_prefork
+# Disable conflicting MPMs so only the default prefork module runs
+RUN a2dismod mpm_event mpm_worker || true
 
 COPY . /var/www/html/
 
