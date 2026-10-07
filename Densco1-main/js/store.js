@@ -197,84 +197,18 @@
     } catch (e) {}
   };
 
-  var ORDERS = [
-    {
-      id: "DHP-10240",
-      customer: "St. Jude Clinic",
-      date: "Sep 7, 2026",
-      summary: "N95 Medical Respirator \u00D710",
-      items: 10,
-      total: 6620,
-      fulfillment: "Delivery",
-      payment: "GCash / QR PH",
-      proof: "gcash_receipt_10240.jpg",
-      status: "pending",
-      verified: false,
-    },
-    {
-      id: "DHP-10231",
-      customer: "Dr. Maria Clara",
-      date: "Sep 5, 2026",
-      summary:
-        "Blood Pressure Monitor, Surgical Gloves \u00D75, Folding Wheelchair",
-      items: 7,
-      total: 8420,
-      fulfillment: "Delivery",
-      payment: "GCash / QR PH",
-      proof: "gcash_receipt_10231.jpg",
-      status: "shipped",
-      verified: true,
-    },
-    {
-      id: "DHP-10198",
-      customer: "Dr. Maria Clara",
-      date: "Aug 28, 2026",
-      summary: "Folding Wheelchair",
-      items: 1,
-      total: 4200,
-      fulfillment: "Store Pickup",
-      payment: "Cash",
-      proof: null,
-      status: "completed",
-      verified: true,
-    },
-    {
-      id: "DHP-10177",
-      customer: "Dr. Maria Clara",
-      date: "Aug 20, 2026",
-      summary: "Surgical Gloves, Face Masks, Isopropyl Alcohol",
-      items: 5,
-      total: 12900,
-      fulfillment: "Delivery",
-      payment: "Bank Transfer",
-      proof: "bank_deposit_slip_10177.jpg",
-      status: "confirmed",
-      verified: true,
-    },
-    {
-      id: "DHP-10160",
-      customer: "HealthFirst Laboratory",
-      date: "Aug 14, 2026",
-      summary: "Digital Thermometer, Pulse Oximeter",
-      items: 2,
-      total: 3050,
-      fulfillment: "Delivery",
-      payment: "GCash / QR PH",
-      proof: "gcash_receipt_10160.jpg",
-      status: "pending",
-      verified: false,
-    },
-  ];
+  // No demo orders: the order history starts empty until real orders are placed.
+  var ORDERS = [];
   D.orders = function () {
-    var o = get("denscoOrders", null);
+    var o = get("denscoOrdersV2", null);
     if (!o) {
       o = ORDERS;
-      put("denscoOrders", o);
+      put("denscoOrdersV2", o);
     }
     return o;
   };
   D.saveOrders = function (o) {
-    put("denscoOrders", o);
+    put("denscoOrdersV2", o);
   };
   D.statusLabel = function (o) {
     return {
