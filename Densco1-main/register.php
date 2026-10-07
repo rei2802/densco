@@ -6,29 +6,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
 
     $input = json_decode(file_get_contents('php://input'), true);
-    $userInput = trim($input['user'] ?? '');
-    $pw = $input['pw'] ?? '';
+    $name  = trim($input['name'] ?? '');
+    $email = trim($input['email'] ?? '');
+    $pw    = $input['pw'] ?? '';
+    $pw2   = $input['pw2'] ?? '';
 
-    if ($userInput === '' || $pw === '') {
-        echo json_encode(['success' => false, 'error' => 'Enter your email and password.']);
+    if ($name === '' || $email === '' || $pw === '') {
+        echo json_encode(['success' => false, 'error' => 'Fill in your name, email and a password.']);
+        exit;
+    }
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        echo json_encode(['success' => false, 'error' => 'Enter a valid email address.']);
+        exit;
+    }
+    if (strlen($name) > 100 || strlen($email) > 100) {
+        echo json_encode(['success' => false, 'error' => 'Name or email is too long.']);
+        exit;
+    }
+    if ($pw !== $pw2) {
+        echo json_encode(['success' => false, 'error' => "The two passwords don't match."]);
+        exit;
+    }
+    if (strlen($pw) < 6) {
+        echo json_encode(['success' => false, 'error' => 'Password must be at least 6 characters.']);
         exit;
     }
 
-    // Your schema has no username column — match on email only
-    $stmt = $conn->prepare("SELECT user_id, full_name, password FROM users WHERE email = ? LIMIT 1");
-    $stmt->bind_param("s", $userInput);
+    // Is the email already used?
+    $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? LIMIT 1");
+    $stmt->bind_param("s", $email);
     $stmt->execute();
-    $result = $stmt->get_result();
-    $row = $result->fetch_assoc();
+    $exists = $stmt->get_result()->num_rows > 0;
+    $stmt->close();
+    if ($exists) {
+        echo json_encode(['success' => false, 'error' => 'That email is already registered. Please log in.']);
+        exit;
+    }
+
+    // Create the account
+    $hash = password_hash($pw, PASSWORD_DEFAULT);
+    $stmt = $conn->prepare("INSERT INTO users (full_name, email, password) VALUES (?, ?, ?)");
+    $stmt->bind_param("sss", $name, $email, $hash);
+    $stmt->execute();
+    $_SESSION['user_id']   = $conn->insert_id;
+    $_SESSION['user_name'] = $name;
     $stmt->close();
 
-    if ($row && password_verify($pw, $row['password'])) {
-        $_SESSION['user_id']   = $row['user_id'];
-        $_SESSION['user_name'] = $row['full_name'];
-        echo json_encode(['success' => true, 'name' => $row['full_name']]);
-    } else {
-        echo json_encode(['success' => false, 'error' => 'Invalid email or password.']);
-    }
+    echo json_encode(['success' => true, 'name' => $name]);
     exit;
 }
 ?>
