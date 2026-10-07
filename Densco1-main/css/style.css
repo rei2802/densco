@@ -1021,3 +1021,9 @@ label.opt span{font-size:12px;color:var(--mute)}
 @media(prefers-reduced-motion:reduce){
   *{transition:none!important}
 }
+
+.pthumb, .pd-img { background:#fff; }
+.pthumb img, .pd-img img, .thumb-s img {
+  object-fit: contain !important;
+  padding: 6px;
+}
