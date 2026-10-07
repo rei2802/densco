@@ -1,16 +1,19 @@
 FROM php:8.2-apache
 
-# Install PHP extensions
+# Install required MySQL extension
 RUN docker-php-ext-install mysqli
 
-# Remove default MPM config load conflicts
+# Remove ALL MPM module configurations from mods-enabled
 RUN rm -f /etc/apache2/mods-enabled/mpm_*
 
-# Enable prefork MPM cleanly
-RUN echo "LoadModule mpm_prefork_module /usr/lib/apache2/modules/mod_mpm_prefork.so" > /etc/apache2/mods-enabled/mpm_prefork.load
+# Enable ONLY mpm_prefork
+RUN ln -s /etc/apache2/mods-available/mpm_prefork.load /etc/apache2/mods-enabled/ \
+    && ln -s /etc/apache2/mods-available/mpm_prefork.conf /etc/apache2/mods-enabled/
 
+# Copy your application files into the document root
 COPY . /var/www/html/
 
+# Set proper ownership
 RUN chown -R www-data:www-data /var/www/html
 
 EXPOSE 80
