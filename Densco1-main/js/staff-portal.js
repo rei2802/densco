@@ -71,7 +71,7 @@
         p = f.elements.pw.value;
 
       if (!u || !p) {
-        err.textContent = "Enter your staff email or username and your password.";
+        err.textContent = "Enter your staff email and your password.";
         return;
       }
       err.textContent = "";
@@ -94,10 +94,7 @@
             err.textContent = "This account does not have a valid staff role.";
             return;
           }
-          if (data.role !== f.elements.role.value) {
-            err.textContent = "This is not a " + ROLES[f.elements.role.value] + " account.";
-            return;
-          }
+          // The role comes from the database (staff.role), based on the email used to log in
           D.put("denscoStaffRole", data.role);
           location.href = "dashboard.html";
         })

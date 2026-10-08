@@ -60,16 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <p class="err" id="formErr"></p>
 
         <div class="field">
-          <label for="r">Role</label>
-          <select id="r" name="role">
-            <option value="owner">Business Owner</option>
-            <option value="admin">Administrator</option>
-            <option value="inventory">Inventory Staff</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="u">Staff username or email</label>
+          <label for="u">Staff email</label>
           <input id="u" name="user" autocomplete="username">
         </div>
 
