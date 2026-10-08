@@ -252,8 +252,8 @@ while ($row = $res->fetch_assoc()) {
           <p class="muted">Product catalog, stock control and restock requests, synced with online stock.</p>
         </div>
 
-        <div data-roles="admin inventory" class="note info">
-          You can edit product details and request restocks. Stock quantities are adjusted by the Owner or through the Restock page.
+        <div class="note info">
+          You can edit product details and request restocks. Stock quantities are updated through the Restock page.
         </div>
 
         <div class="toolbar">
@@ -276,7 +276,7 @@ while ($row = $res->fetch_assoc()) {
           </table>
         </div>
 
-        <div class="card" data-roles="owner">
+        <div class="card hide">
           <h3>Add new product</h3>
           <div class="row2">
             <div class="field">
@@ -330,7 +330,7 @@ while ($row = $res->fetch_assoc()) {
                 <label>Price (₱)</label>
                 <input id="ePrice" type="number" min="0">
               </div>
-              <div class="field" data-roles="owner">
+              <div class="field hide">
                 <label>Stock quantity</label>
                 <input id="eStock" type="number" min="0">
               </div>
@@ -428,10 +428,8 @@ while ($row = $res->fetch_assoc()) {
 
       $("rows").innerHTML = P.map((p) => {
         const st = DHP.state(p);
-        const qtyCell = (DHP.role === "admin" || DHP.role === "inventory")
-          ? `${p.stock} units`
-          : `<div class="qty" style="height:30px"><button data-adj="-1" data-id="${p.id}">−</button><input value="${p.stock}" readonly><button data-adj="1" data-id="${p.id}">+</button></div>`;
-        const action = (DHP.role !== "owner" && st !== "in")
+        const qtyCell = `${p.stock} units`;
+        const action = (st !== "in")
           ? `<button class="btn btn-line btn-sm" data-req="${p.id}">Request restock</button>`
           : `<button class="link" data-edit="${p.id}">Edit</button>`;
         const thumb = p.image
@@ -519,7 +517,6 @@ while ($row = $res->fetch_assoc()) {
       fd.append("price", +$("ePrice").value || 0);
       fd.append("desc", $("eDesc").value);
       fd.append("hidden", $("eHidden").checked ? "1" : "");
-      if (DHP.role === "owner") fd.append("stock", +$("eStock").value || 0);
       if ($("eImage").files[0]) fd.append("image", $("eImage").files[0]);
       if ($("eRemoveImg").checked) fd.append("removeImage", "1");
 
