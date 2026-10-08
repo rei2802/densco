@@ -36,14 +36,14 @@ $pass = "";
 $name = "densco_db";
 }
 
-// Connect to MySQL
-$conn = new mysqli(
-    $host,
-    $user,
-    $pass,
-    $name,
-    (int)$port
-);
+// // Connect to MySQL
+// $conn = new mysqli(
+//     $host,
+//     $user,
+//     $pass,
+//     $name,
+//     (int)$port
+// );
 
 // Set UTF-8
 $conn->set_charset("utf8mb4");
