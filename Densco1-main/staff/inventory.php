@@ -1,9 +1,9 @@
 <?php
 require_once '../config.php';
 
-// Saves an uploaded image (if any) into assets/products/ and returns its
-// path relative to the project root (e.g. "assets/products/xyz.jpg"),
-// or null if no file was uploaded, or false if the file type isn't allowed.
+// Uploads an image to Cloudinary (permanent storage - Render's disk is wiped on every deploy)
+// and returns its https URL, null if no file was uploaded, or false if the upload failed
+// or the file type isn't allowed. A .jfif file is a JPEG, so it is detected as image/jpeg.
 function handleProductImageUpload($fileKey) {
     if (empty($_FILES[$fileKey]) || $_FILES[$fileKey]['error'] === UPLOAD_ERR_NO_FILE) {
         return null;
@@ -13,22 +13,46 @@ function handleProductImageUpload($fileKey) {
     }
 
     $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
-    $mime = mime_content_type($_FILES[$fileKey]['tmp_name']);
+    $tmp  = $_FILES[$fileKey]['tmp_name'];
+    $mime = mime_content_type($tmp);
     if (!isset($allowed[$mime])) {
         return false;
     }
 
-    $destDir = __DIR__ . '/../assets/products/';
-    if (!is_dir($destDir)) {
-        mkdir($destDir, 0755, true);
-    }
-
-    $filename = 'product_' . uniqid() . '.' . $allowed[$mime];
-    if (!move_uploaded_file($_FILES[$fileKey]['tmp_name'], $destDir . $filename)) {
+    $cloud  = getenv('CLOUDINARY_CLOUD_NAME');
+    $key    = getenv('CLOUDINARY_API_KEY');
+    $secret = getenv('CLOUDINARY_API_SECRET');
+    if (!$cloud || !$key || !$secret) {
         return false;
     }
 
-    return 'assets/products/' . $filename;
+    $timestamp = time();
+    $folder    = 'densco/products';
+    // Cloudinary signature: sha1 of the sorted params + API secret
+    $signature = sha1("folder=$folder&timestamp=$timestamp" . $secret);
+
+    $ch = curl_init("https://api.cloudinary.com/v1_1/$cloud/image/upload");
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_POSTFIELDS     => [
+            'file'      => new CURLFile($tmp, $mime, 'upload.' . $allowed[$mime]),
+            'api_key'   => $key,
+            'timestamp' => $timestamp,
+            'folder'    => $folder,
+            'signature' => $signature,
+        ],
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($resp === false || $code !== 200) {
+        return false;
+    }
+    $data = json_decode($resp, true);
+    return $data['secure_url'] ?? false;
 }
 
 // ============================================
@@ -124,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $imagePath = handleProductImageUpload('image');
         if ($imagePath === false) {
-            echo json_encode(['success' => false, 'error' => 'Image must be a JPG, PNG, WEBP or GIF file.']);
+            echo json_encode(['success' => false, 'error' => 'Image upload failed. Use a JPG, JFIF, PNG, WEBP or GIF file (and check the Cloudinary settings).']);
             exit;
         }
         if ($imagePath === null) {
@@ -165,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $imagePath = handleProductImageUpload('image');
         if ($imagePath === false) {
-            echo json_encode(['success' => false, 'error' => 'Image must be a JPG, PNG, WEBP or GIF file.']);
+            echo json_encode(['success' => false, 'error' => 'Image upload failed. Use a JPG, JFIF, PNG, WEBP or GIF file (and check the Cloudinary settings).']);
             exit;
         }
 
@@ -404,6 +428,8 @@ while ($row = $res->fetch_assoc()) {
     let term = "";
     let editing = null;
     let reqProductId = null;
+    // Images are now full Cloudinary URLs; older ones were local paths
+    const imgUrl = (path) => (/^https?:\/\//.test(path) ? path : "../" + path);
 
     ["nCat", "eCat"].forEach((id) => {
       $(id).innerHTML = DHP.categories.map((c) => `<option>${c}</option>`).join("");
@@ -433,7 +459,7 @@ while ($row = $res->fetch_assoc()) {
           ? `<button class="btn btn-line btn-sm" data-req="${p.id}">Request restock</button>`
           : `<button class="link" data-edit="${p.id}">Edit</button>`;
         const thumb = p.image
-          ? `<img src="../${p.image}" alt="" style="display:inline-block;width:40px;height:40px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle">`
+          ? `<img src="${imgUrl(p.image)}" alt="" style="display:inline-block;width:40px;height:40px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle">`
           : "";
 
         return `<tr><td>${thumb}<strong>${DHP.esc(p.name)}</strong>${p.hidden ? ' <span class="badge">Hidden</span>' : ""}</td><td>${p.cat}</td><td>${DHP.peso(p.price)}</td><td>${qtyCell}</td><td><span class="badge ${st}">${st === "in" ? "In Stock" : st === "low" ? "Low Stock" : "Out of Stock"}</span></td><td class="acts">${action}</td></tr>`;
@@ -496,7 +522,7 @@ while ($row = $res->fetch_assoc()) {
 
         const prev = $("eImgPreview");
         if (p.image) {
-          prev.src = "../" + p.image;
+          prev.src = imgUrl(p.image);
           prev.style.display = "inline-block";
           $("eRemoveImgWrap").style.display = "";
         } else {
