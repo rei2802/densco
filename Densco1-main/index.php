@@ -56,7 +56,10 @@ while ($row = $res->fetch_assoc()) {
         </div>
       </section>
       <h2 class="sec">Shop by category</h2>
-      <div class="grid4" id="cats"></div>
+      <div class="grid4 cat-grid" id="cats"></div>
+      <div class="cat-more">
+        <button class="btn btn-line" id="catToggle" type="button">See all</button>
+      </div>
       <h2 class="sec">Business information</h2>
       <div class="grid4" id="biz"></div>
     </main>
@@ -68,12 +71,26 @@ while ($row = $res->fetch_assoc()) {
     <script>
       const P = DHP.products().filter((p) => !p.hidden),
         B = DHP.biz();
-      document.getElementById("cats").innerHTML = DHP.categories
-        .map((c) => {
-          const n = P.filter((p) => p.cat === c).length;
-          return `<a class="tile" href="catalog.php?cat=${encodeURIComponent(c)}"><b>${c}</b><span>${n} product${n === 1 ? "" : "s"}</span></a>`;
-        })
-        .join("");
+      const CAT_LIMIT = 5;
+      let catsExpanded = false;
+      function renderCats() {
+        const cats = DHP.categories;
+        document.getElementById("cats").innerHTML = cats
+          .map((c, i) => {
+            const n = P.filter((p) => p.cat === c).length;
+            const hidden = !catsExpanded && i >= CAT_LIMIT ? " hide" : "";
+            return `<a class="tile${hidden}" href="catalog.php?cat=${encodeURIComponent(c)}"><b>${c}</b><span>${n} product${n === 1 ? "" : "s"}</span></a>`;
+          })
+          .join("");
+        const btn = document.getElementById("catToggle");
+        btn.classList.toggle("hide", cats.length <= CAT_LIMIT);
+        btn.textContent = catsExpanded ? "Show less" : "See all";
+      }
+      document.getElementById("catToggle").addEventListener("click", () => {
+        catsExpanded = !catsExpanded;
+        renderCats();
+      });
+      renderCats();
       document.getElementById("biz").innerHTML = [
         ["Location", B.address],
         ["Opening hours", B.hours],
