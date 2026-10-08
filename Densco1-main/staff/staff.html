@@ -18,12 +18,57 @@
       <main>
         <div class="page-head">
           <h1>Manage accounts</h1>
-          <p class="muted">All currently active accounts across every role.</p>
+          <p class="muted">Create staff accounts and manage all currently active accounts across every role.</p>
+        </div>
+
+        <div class="card">
+          <div class="flex between">
+            <div>
+              <h3 style="margin-bottom:2px">Create staff account</h3>
+              <p class="muted sm">Add a new Administrator or Inventory Staff login.</p>
+            </div>
+            <button class="btn btn-red" id="openCreate">Create account</button>
+          </div>
         </div>
 
         <div class="card">
           <h3>Active accounts (<span id="count">0</span>)</h3>
           <div class="list" id="accts"><div class="empty">Loading accounts...</div></div>
+        </div>
+
+        <div class="modal" id="createModal">
+          <div class="modal-box">
+            <div class="modal-head">
+              <h3>Create account</h3>
+              <button class="modal-x" data-close>&times;</button>
+            </div>
+            <div class="field">
+              <label for="cType">Account type</label>
+              <select id="cType">
+                <option value="">Select account type</option>
+                <option value="admin">Administrator</option>
+                <option value="inventory">Inventory Staff</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="cName">Full name</label>
+              <input id="cName" maxlength="100" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="cEmail">Email</label>
+              <input id="cEmail" type="email" maxlength="100" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="cPass">Password</label>
+              <input id="cPass" type="password" autocomplete="new-password">
+              <p class="muted sm" style="margin-top:6px">At least 8 characters.</p>
+            </div>
+            <p class="err" id="cErr"></p>
+            <div class="flex" style="justify-content:flex-end">
+              <button class="btn btn-line" data-close>Cancel</button>
+              <button class="btn btn-red" id="cSubmit">Create account</button>
+            </div>
+          </div>
         </div>
 
         <div class="modal" id="acctModal">
@@ -157,6 +202,53 @@
         load();
       } catch (err) {
         $("acctErr").textContent = "Something went wrong. Please try again.";
+      }
+    };
+
+
+    // ---- Create a new staff account
+    $("openCreate").onclick = () => {
+      $("cType").value = "";
+      $("cName").value = "";
+      $("cEmail").value = "";
+      $("cPass").value = "";
+      $("cErr").textContent = "";
+      $("createModal").classList.add("open");
+    };
+
+    $("cSubmit").onclick = async () => {
+      const err = $("cErr");
+      err.textContent = "";
+
+      const role = $("cType").value;
+      const name = $("cName").value.trim();
+      const email = $("cEmail").value.trim();
+      const password = $("cPass").value;
+
+      if (!role) { err.textContent = "Choose an account type."; return; }
+      if (!name) { err.textContent = "Enter the full name."; return; }
+      if (!email) { err.textContent = "Enter the email."; return; }
+      if (password.length < 8) { err.textContent = "Password must be at least 8 characters."; return; }
+
+      $("cSubmit").disabled = true;
+      try {
+        const r = await fetch("accounts.php", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "create", role: role, name: name, email: email, password: password })
+        });
+        if (r.status === 401) { location.href = "login.php"; return; }
+        const d = await r.json();
+        if (!d.success) { err.textContent = d.error || "Could not create the account."; return; }
+
+        $("createModal").classList.remove("open");
+        DHP.toast("Account created");
+        load();
+      } catch (e) {
+        err.textContent = "Something went wrong. Please try again.";
+      } finally {
+        $("cSubmit").disabled = false;
       }
     };
 
