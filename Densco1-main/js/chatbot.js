@@ -61,7 +61,7 @@
     D.put(KEY, all);
     return;
   }
-
+console.log("CHATBOT FETCH STARTING");
   fetch("api/chatbot.php", {
     method: "POST",
     headers: {
