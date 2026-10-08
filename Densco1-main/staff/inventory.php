@@ -300,7 +300,7 @@ while ($row = $res->fetch_assoc()) {
           </table>
         </div>
 
-        <div class="card hide">
+        <div class="card" data-roles="inventory">
           <h3>Add new product</h3>
           <div class="row2">
             <div class="field">
