@@ -21,7 +21,7 @@ if ($databaseUrl) {
 
     $db = parse_url($databaseUrl);
 
-    $host = getenv('DB_HOST') ?: '127.0.0.1';
+    $host = $db['host'] ?? 'localhost';
     $port = $db['port'] ?? 3306;
     $user = isset($db['user']) ? urldecode($db['user']) : 'root';
     $pass = isset($db['pass']) ? urldecode($db['pass']) : '';
@@ -29,21 +29,22 @@ if ($databaseUrl) {
 
 } else {
     // XAMPP / Local MySQL settings
-$host = "localhost";
-$port = 3306;
-$user = "root";
-$pass = "";
-$name = "densco_db";
+
+    $host = getenv('DB_HOST') ?: 'localhost';
+    $port = getenv('DB_PORT') ?: 3306;
+    $user = getenv('DB_USER') ?: 'root';
+    $pass = getenv('DB_PASS') !== false ? getenv('DB_PASS') : '';
+    $name = getenv('DB_NAME') ?: 'densco_db';
 }
 
-// // Connect to MySQL
-// $conn = new mysqli(
-//     $host,
-//     $user,
-//     $pass,
-//     $name,
-//     (int)$port
-// );
+// Connect to MySQL
+$conn = new mysqli(
+    $host,
+    $user,
+    $pass,
+    $name,
+    (int)$port
+);
 
 // Set UTF-8
 $conn->set_charset("utf8mb4");
