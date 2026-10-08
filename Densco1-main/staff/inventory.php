@@ -455,9 +455,12 @@ while ($row = $res->fetch_assoc()) {
       $("rows").innerHTML = P.map((p) => {
         const st = DHP.state(p);
         const qtyCell = `${p.stock} units`;
+        const reqBtn = `<button class="btn btn-line btn-sm" data-req="${p.id}">Request restock</button>`;
+        const editBtn = `<button class="link" data-edit="${p.id}">Edit</button>`;
+        // Inventory Staff can always edit, even when the product is low or out of stock
         const action = (st !== "in")
-          ? `<button class="btn btn-line btn-sm" data-req="${p.id}">Request restock</button>`
-          : `<button class="link" data-edit="${p.id}">Edit</button>`;
+          ? (DHP.role === "inventory" ? reqBtn + ` <span style="margin-left:10px">${editBtn}</span>` : reqBtn)
+          : editBtn;
         const thumb = p.image
           ? `<img src="${imgUrl(p.image)}" alt="" style="display:inline-block;width:40px;height:40px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle">`
           : "";

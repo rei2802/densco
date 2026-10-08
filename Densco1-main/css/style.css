@@ -1027,3 +1027,7 @@ label.opt span{font-size:12px;color:var(--mute)}
   object-fit: contain !important;
   padding: 6px;
 }
+
+/* Shop product cards: same-size image frame, image centered and fully visible */
+.pthumb{height:auto !important;aspect-ratio:4/3 !important;display:flex !important;align-items:center;justify-content:center;overflow:hidden;background:#fff;border-bottom:1px solid var(--line);text-align:center}
+.pthumb img{width:100% !important;height:100% !important;object-fit:contain !important;padding:10px}
