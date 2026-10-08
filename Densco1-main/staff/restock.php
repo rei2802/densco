@@ -1,5 +1,5 @@
 <?php
-// Restock API (Admin only): lists products and records a restock, adding the
+// Restock API (Admin and Inventory Staff): lists products and records a restock, adding the
 // quantity to products.stock_quantity (the same value the shop displays).
 session_start();
 
@@ -13,7 +13,7 @@ function json_out($code, $payload) {
 
 $role = $_SESSION['staff_role'] ?? null;
 if (!$role) json_out(401, ['success' => false, 'error' => 'Please log in again.']);
-if ($role !== 'admin') json_out(403, ['success' => false, 'error' => 'Only the Administrator can restock.']);
+if (!in_array($role, ['admin', 'inventory'], true)) json_out(403, ['success' => false, 'error' => 'Only the Administrator or Inventory Staff can restock.']);
 
 $inTx = false;
 
