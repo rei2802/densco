@@ -1,4 +1,3 @@
-```php
 <?php
 
 header("Content-Type: application/json; charset=UTF-8");
@@ -29,7 +28,7 @@ if (empty($GEMINI_API_KEY)) {
     ], 500);
 }
 
-// Read the customer's message
+// Read message from chatbot.js
 $input = json_decode(file_get_contents("php://input"), true);
 $message = trim($input["message"] ?? "");
 
@@ -43,7 +42,7 @@ if ($message === "") {
 // Gemini API endpoint
 $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
-// Instructions for Densco's AI assistant
+// Densco chatbot instructions
 $prompt = "You are the official Densco Shop Assistant.
 
 Densco is an online medical supplies and equipment shop.
@@ -51,14 +50,13 @@ Densco is an online medical supplies and equipment shop.
 Your responsibilities:
 - Answer customer questions about products and services.
 - Explain general product information.
-- Help with delivery, pickup, payment, orders, returns, and warranties.
+- Help with delivery, pickup, payments, orders, returns, and warranties.
 - Be friendly, professional, and concise.
-- Never pretend to represent another company.
 - Never invent products, prices, stock quantities, policies, or contact information.
 - You do not have live database access unless product information is explicitly provided.
 - If you do not know a Densco-specific fact, say so honestly.
 - Do not diagnose medical conditions or prescribe treatments.
-- For questions requiring staff assistance, politely recommend contacting the Densco team.
+- Recommend contacting Densco staff when a question requires human assistance.
 
 Customer's message:
 " . $message;
@@ -84,40 +82,38 @@ if ($payload === false) {
     ], 500);
 }
 
-// Check whether PHP cURL is available
-if (!function_exists("curl_init")) {
-    error_log("Densco chatbot: PHP cURL extension is unavailable.");
+// Prepare the HTTP request
+$options = [
+    "http" => [
+        "method" => "POST",
+        "header" =>
+            "Content-Type: application/json\r\n" .
+            "x-goog-api-key: " . $GEMINI_API_KEY . "\r\n",
+        "content" => $payload,
+        "timeout" => 30,
+        "ignore_errors" => true
+    ]
+];
 
-    respond([
-        "success" => false,
-        "error" => "AI service is temporarily unavailable."
-    ], 500);
-}
+$context = stream_context_create($options);
 
 // Send request to Gemini
-$ch = curl_init($url);
+$response = @file_get_contents($url, false, $context);
 
-curl_setopt_array($ch, [
-    CURLOPT_POST => true,
-    CURLOPT_HTTPHEADER => [
-        "Content-Type: application/json",
-        "x-goog-api-key: " . $GEMINI_API_KEY
-    ],
-    CURLOPT_POSTFIELDS => $payload,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_CONNECTTIMEOUT => 10,
-    CURLOPT_TIMEOUT => 30
-]);
+// Get HTTP status code
+$status = 0;
 
-$response = curl_exec($ch);
-$curlError = curl_error($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+if (isset($http_response_header)) {
+    foreach ($http_response_header as $header) {
+        if (preg_match('/^HTTP\/\S+\s+(\d+)/', $header, $matches)) {
+            $status = (int) $matches[1];
+        }
+    }
+}
 
-curl_close($ch);
-
-// Handle connection errors
+// Handle connection failures
 if ($response === false) {
-    error_log("Densco Gemini connection error: " . $curlError);
+    error_log("Densco chatbot: Could not connect to Gemini.");
 
     respond([
         "success" => false,
@@ -125,13 +121,13 @@ if ($response === false) {
     ], 502);
 }
 
-// Decode Gemini's response
+// Decode Gemini response
 $result = json_decode($response, true);
 
-// Handle Gemini HTTP errors
-if ($httpCode < 200 || $httpCode >= 300) {
+// Handle API errors
+if ($status < 200 || $status >= 300) {
     error_log(
-        "Densco Gemini HTTP " . $httpCode . ": " . $response
+        "Densco Gemini HTTP " . $status . ": " . $response
     );
 
     respond([
@@ -140,11 +136,12 @@ if ($httpCode < 200 || $httpCode >= 300) {
     ], 502);
 }
 
-// Extract AI response
-$answer = $result["candidates"][0]["content"]["parts"][0]["text"] ?? "";
+// Extract the AI answer
+$answer =
+    $result["candidates"][0]["content"]["parts"][0]["text"] ?? "";
 
 if (trim($answer) === "") {
-    error_log("Densco Gemini: no answer returned.");
+    error_log("Densco chatbot: Gemini returned no answer.");
 
     respond([
         "success" => false,
@@ -152,11 +149,10 @@ if (trim($answer) === "") {
     ], 502);
 }
 
-// Return answer to chatbot.js
+// Return successful response
 respond([
     "success" => true,
     "message" => $answer
 ]);
 
 ?>
-```

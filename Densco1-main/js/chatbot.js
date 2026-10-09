@@ -1,4 +1,3 @@
-```javascript
 function askAI(text) {
   return fetch("/api/chatbot.php", {
     method: "POST",
@@ -30,4 +29,3 @@ function askAI(text) {
     );
   });
 }
-```
