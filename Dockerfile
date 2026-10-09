@@ -1,7 +1,7 @@
 FROM php:8.2-apache
 
 # MySQL support (config.php uses mysqli)
-RUN docker-php-ext-install mysqli curl
+RUN docker-php-ext-install mysqli
 
 # Render gives the app a port in $PORT (default 10000) - make Apache listen on it
 ENV PORT=10000
