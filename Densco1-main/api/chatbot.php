@@ -1,158 +1,113 @@
 <?php
+header('Content-Type: application/json');
+require_once __DIR__ . '/config.php';
 
-header("Content-Type: application/json; charset=UTF-8");
-
-require_once __DIR__ . "/config.php";
-
-function respond($data, $status = 200) {
-    http_response_code($status);
-    echo json_encode($data);
-    exit;
-}
-
-// Accept POST requests only
-if ($_SERVER["REQUEST_METHOD"] !== "POST") {
-    respond([
-        "success" => false,
-        "error" => "Method not allowed."
-    ], 405);
-}
-
-// Check API key
-if (empty($GEMINI_API_KEY)) {
-    error_log("Densco chatbot: GEMINI_API_KEY is missing.");
-
-    respond([
-        "success" => false,
-        "error" => "AI service is not configured."
-    ], 500);
-}
-
-// Read message from chatbot.js
-$input = json_decode(file_get_contents("php://input"), true);
-$message = trim($input["message"] ?? "");
-
-if ($message === "") {
-    respond([
-        "success" => false,
-        "error" => "Please enter a message."
-    ], 400);
-}
-
-// Gemini API endpoint
-$url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-
-// Densco chatbot instructions
-$prompt = "You are the official Densco Shop Assistant.
-
-Densco is an online medical supplies and equipment shop.
-
-Your responsibilities:
-- Answer customer questions about products and services.
-- Explain general product information.
-- Help with delivery, pickup, payments, orders, returns, and warranties.
-- Be friendly, professional, and concise.
-- Never invent products, prices, stock quantities, policies, or contact information.
-- You do not have live database access unless product information is explicitly provided.
-- If you do not know a Densco-specific fact, say so honestly.
-- Do not diagnose medical conditions or prescribe treatments.
-- Recommend contacting Densco staff when a question requires human assistance.
-
-Customer's message:
-" . $message;
-
-$payload = json_encode([
-    "contents" => [
-        [
-            "parts" => [
-                ["text" => $prompt]
-            ]
-        ]
-    ],
-    "generationConfig" => [
-        "temperature" => 0.3,
-        "maxOutputTokens" => 300
-    ]
-]);
-
-if ($payload === false) {
-    respond([
-        "success" => false,
-        "error" => "Could not prepare the AI request."
-    ], 500);
-}
-
-// Prepare the HTTP request
-$options = [
-    "http" => [
-        "method" => "POST",
-        "header" =>
-            "Content-Type: application/json\r\n" .
-            "x-goog-api-key: " . $GEMINI_API_KEY . "\r\n",
-        "content" => $payload,
-        "timeout" => 30,
-        "ignore_errors" => true
-    ]
-];
-
-$context = stream_context_create($options);
-
-// Send request to Gemini
-$response = @file_get_contents($url, false, $context);
-
-// Get HTTP status code
-$status = 0;
-
-if (isset($http_response_header)) {
-    foreach ($http_response_header as $header) {
-        if (preg_match('/^HTTP\/\S+\s+(\d+)/', $header, $matches)) {
-            $status = (int) $matches[1];
-        }
+if (!function_exists('fail')) {
+    function fail($code, $msg) {
+        http_response_code($code);
+        echo json_encode(['success' => false, 'error' => $msg]);
+        exit;
     }
 }
 
-// Handle connection failures
-if ($response === false) {
-    error_log("Densco chatbot: Could not connect to Gemini.");
-
-    respond([
-        "success" => false,
-        "error" => "Could not connect to the AI service."
-    ], 502);
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    fail(405, 'Use POST');
 }
 
-// Decode Gemini response
-$result = json_decode($response, true);
+$input   = json_decode(file_get_contents('php://input'), true) ?: [];
+$message = trim($input['message'] ?? '');
+$context = trim($input['context'] ?? '');
+$history = is_array($input['history'] ?? null) ? $input['history'] : [];
 
-// Handle API errors
-if ($status < 200 || $status >= 300) {
-    error_log(
-        "Densco Gemini HTTP " . $status . ": " . $response
-    );
-
-    respond([
-        "success" => false,
-        "error" => "The AI service returned an error. Please try again."
-    ], 502);
+if ($message === '') {
+    fail(400, 'Message is empty');
 }
 
-// Extract the AI answer
-$answer =
-    $result["candidates"][0]["content"]["parts"][0]["text"] ?? "";
+$systemText =
+"You are the Densco Assistant, the official virtual assistant of Densco, a seller of hospital and medical equipment in the Philippines.\n" .
+"Language:\n" .
+"- Always reply in the same language as the customer's latest message (for example English, Filipino/Tagalog, Cebuano, Ilocano, Spanish, Chinese, Japanese, Korean, Arabic, Hindi). Understand any language the customer uses.\n" .
+"- If the customer mixes languages (such as Taglish), reply in the same natural mix.\n" .
+"- Keep product names, prices (PHP) and the phrase 'talk to staff' exactly as they appear in the business data.\n" .
+"Tone and style:\n" .
+"- Be professional, courteous and polite, with a warm and respectful tone suitable for business customers such as clinics and hospitals.\n" .
+"- Keep answers short, clear and well organized (2 to 4 sentences). Offer further help at the end when appropriate.\n" .
+"- Speak as Densco, using 'we' and 'our'.\n" .
+"Rules:\n" .
+"- For questions about Densco products, stock, prices, delivery, payment, hours or location, answer ONLY from the BUSINESS DATA below.\n" .
+"- If the answer is not in the business data, do not guess. Politely say you are unable to confirm it and offer to connect the customer with a Densco team member. Tell them to type 'talk to staff'.\n" .
+"- Never invent prices, stock numbers, specs or policies.\n" .
+"- Do not give medical advice. For unrelated questions, politely explain that you can only assist with Densco products and services.\n" .
+"- Use plain text only, no markdown, no emojis.\n\n" .
+"BUSINESS DATA:\n" . ($context !== '' ? $context : '(none available)');
 
-if (trim($answer) === "") {
-    error_log("Densco chatbot: Gemini returned no answer.");
+$contents = [];
+foreach (array_slice($history, -12) as $h) {
+    $role = (($h['role'] ?? '') === 'model') ? 'model' : 'user';
+    $text = trim((string)($h['text'] ?? ''));
+    if ($text === '') continue;
+    $contents[] = ['role' => $role, 'parts' => [['text' => $text]]];
+}
+$contents[] = ['role' => 'user', 'parts' => [['text' => $message]]];
 
-    respond([
-        "success" => false,
-        "error" => "The AI service returned no answer."
-    ], 502);
+$payload = [
+    'system_instruction' => ['parts' => [['text' => $systemText]]],
+    'contents' => $contents,
+    'generationConfig' => [
+        'temperature' => 0.3,
+        'maxOutputTokens' => 1000   // non-English text uses more tokens
+    ]
+];
+
+$models = [$model, 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'];
+
+set_time_limit(60);
+
+$reply = null;
+$lastError = 'No response from Gemini';
+
+foreach ($models as $m) {
+    for ($try = 1; $try <= 2; $try++) {
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$m}:generateContent";
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_TIMEOUT => 12,
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'x-goog-api-key: ' . $apiKey
+            ],
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE)
+            // , CURLOPT_SSL_VERIFYPEER => false  // local XAMPP only
+        ]);
+
+        $response = curl_exec($ch);
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        if ($response === false) {
+            $lastError = 'Connection failed: ' . curl_error($ch);
+            curl_close($ch);
+            sleep(1);
+            continue;
+        }
+        curl_close($ch);
+
+        $data = json_decode($response, true);
+        $reply = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+
+        if ($reply !== null) break 2;
+
+        $lastError = $data['error']['message'] ?? $lastError;
+
+        if (!in_array($status, [429, 500, 503])) break;
+        sleep(1);
+    }
 }
 
-// Return successful response
-respond([
-    "success" => true,
-    "message" => $answer
-]);
+if ($reply === null) {
+    fail(500, $lastError);
+}
 
-?>
+echo json_encode(['success' => true, 'message' => $reply], JSON_UNESCAPED_UNICODE);

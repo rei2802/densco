@@ -1,7 +1,7 @@
 /* Densco Chatbot
    - Local FAQ responses
    - Live product stock lookup
-   - Gemini AI responses through /api/chatbot.php
+   - Gemini AI responses through api/chatbot.php
    - Escalation to staff when requested or AI is unavailable
 */
 
@@ -13,92 +13,171 @@
   var SESS = "denscoActiveInquiry";
   var POLL = 4000;
 
-  var who = D.user() || "Guest visitor";
+  // Path to the PHP file. It starts with "/" so it works from ANY page
+  // (home, shop, My Account, admin). A path like "api/chatbot.php" breaks as
+  // soon as the page is in a different folder, for example after logging in.
+  // On a live website at the domain root, change this to "/api/chatbot.php".
+  var API_URL = "/densco/Densco1-main/api/chatbot.php";
+
+  var OWNER = "denscoActiveInquiryOwner";
+  var GREETING =
+    "Good day! I am the Densco Assistant. How may I help you with product availability, delivery, payment or your orders?";
+
+  // A plain-text identity for whoever is using the site right now,
+  // so a chat can be tied to one account (or to the guest).
+  function currentUser() {
+    return D.user() || "Guest visitor";
+  }
+
+  function userKey(user) {
+    if (user && typeof user === "object") {
+      return String(user.email || user.id || user.username || user.name || JSON.stringify(user));
+    }
+    return String(user);
+  }
+
+  var who = currentUser();
+  var whoKey = userKey(who);
   var awaitingProductName = false;
   var active = null;
   var seen = 0;
   var busy = false;
 
+  // Remembers the last few messages so the AI can follow the conversation
+  var history = [];
+
+  function remember(role, text) {
+    history.push({ role: role, text: text });
+    if (history.length > 12) history.shift();
+  }
+
+  // Gives the AI your real business info, live stock levels and policies
+  function buildContext() {
+    try {
+      var biz = D.biz();
+      var lines = D.products().map(function (product) {
+        var line = "- " + product.name + ": " + D.stateLabel(product);
+
+        // Optional fields: only added if your products have them
+        if (product.price !== undefined && product.price !== null && product.price !== "") {
+          line += ", price: PHP " + product.price;
+        }
+        if (product.description) {
+          line += ". " + product.description;
+        }
+        return line;
+      });
+
+      return (
+        "Business hours: " + biz.hours + ". " +
+        "Address: " + biz.address + ".\n" +
+        "Delivery: Metro Manila delivery takes 1 to 2 days. Free store pickup is available at the Quezon City warehouse.\n" +
+        "Payment: GCash / QR PH, bank transfer and cash. GCash and bank transfer orders need proof of payment uploaded at checkout.\n" +
+        "Warranty: Most items carry a 1-year manufacturer warranty. For returns or replacements, customers message Densco on Viber or Messenger.\n" +
+        "Products and live stock:\n" + lines.join("\n")
+      );
+    } catch (error) {
+      return "";
+    }
+  }
+
   // Business FAQ responses
   var FAQ = [
     [
       /\b(hello|hi|hey)\b/,
-      "Hello! I can check real-time stock, explain delivery and payment, answer product questions, or connect you with our team."
+      "Good day! Welcome to Densco. I can help you check product availability, explain our delivery and payment options, or connect you with our team. How may I assist you today?"
     ],
     [
       /deliver|shipping|ship|pickup|pick up/,
-      "Metro Manila delivery takes 1 to 2 days. You can also choose free store pickup at our Quezon City warehouse at checkout."
+      "Delivery within Metro Manila takes 1 to 2 days. Alternatively, you may choose free store pickup at our Quezon City warehouse during checkout."
     ],
     [
       /payment|pay|gcash|bank|proof|cash/,
-      "We accept GCash / QR PH, bank transfer and cash. GCash and bank transfer orders need a proof of payment uploaded at checkout."
+      "We accept GCash / QR PH, bank transfer and cash. For GCash and bank transfer payments, please upload your proof of payment during checkout."
     ],
     [
       /order|status|track/,
-      "You can follow every order from Pending to Completed under My Account."
+      "You may track your order status, from Pending to Completed, under My Account."
     ],
     [
       /hours|open|location|address|where/,
-      "We are open " +
+      "Our business hours are " +
         D.biz().hours.toLowerCase() +
-        " at " +
+        ". We are located at " +
         D.biz().address +
         "."
     ],
     [
       /return|refund|warranty/,
-      "Most items carry a 1-year manufacturer warranty. For returns or replacements, message us on Viber or Messenger."
+      "Most of our items come with a 1-year manufacturer warranty. For returns or replacements, please message us on Viber or Messenger and our team will gladly assist you."
     ]
   ];
 
-  // Find products using actual product names from the website
+  // Words that never identify a product
+  var NOISE = {
+    how:1, much:1, many:1, the:1, you:1, your:1, our:1, have:1, has:1, any:1,
+    got:1, sell:1, selling:1, price:1, prices:1, cost:1, stock:1, stocks:1,
+    available:1, availability:1, inventory:1, please:1, can:1, could:1,
+    would:1, want:1, need:1, buy:1, for:1, with:1, and:1, what:1, whats:1,
+    there:1, this:1, that:1, some:1, does:1, about:1, check:1, tell:1,
+    list:1, are:1, magkano:1, meron:1, ito:1, box:1, pack:1, units:1, unit:1
+  };
+
+  // lower-case, strip symbols, drop a trailing "s" so "carts" matches "cart"
+  function words(text) {
+    return text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(function (w) { return w.length > 2; })
+      .map(function (w) { return w.replace(/s$/, ""); });
+  }
+
+  // Find the product the customer is really asking about.
+  // A product only matches if most of the customer's key words are in its name,
+  // so "oxygen cart" will NOT wrongly match "Utility Cart".
   function findProduct(message) {
     var products = D.products();
     var text = message.toLowerCase();
 
+    // 1. The full product name was typed
     var exactMatch = products.filter(function (product) {
       return text.indexOf(product.name.toLowerCase()) !== -1;
     })[0];
 
     if (exactMatch) return exactMatch;
 
-    var STOP = {
-      of: 1,
-      box: 1,
-      pack: 1,
-      the: 1,
-      and: 1,
-      for: 1,
-      with: 1
-    };
+    // 2. Word scoring
+    var query = words(text).filter(function (w) {
+      return !NOISE[w] && !NOISE[w + "s"];
+    });
 
-    for (var i = 0; i < products.length; i++) {
-      var words = products[i].name
-        .toLowerCase()
-        .split(/[\s()\u2014-]+/);
+    if (!query.length) return null;
 
-      for (var j = 0; j < words.length; j++) {
-        var word = words[j];
+    var best = null;
+    var bestHits = 0;
+    var bestTight = 0;
 
-        if (
-          word.length > 3 &&
-          !STOP[word] &&
-          text.indexOf(word) !== -1
-        ) {
-          return products[i];
-        }
+    products.forEach(function (product) {
+      var nameWords = words(product.name).filter(function (w) {
+        return !NOISE[w] && !NOISE[w + "s"];
+      });
+
+      var hits = query.filter(function (q) {
+        return nameWords.indexOf(q) !== -1;
+      }).length;
+
+      if (!hits || hits / query.length < 0.6) return;
+
+      var tight = hits / (nameWords.length || 1);
+
+      if (hits > bestHits || (hits === bestHits && tight > bestTight)) {
+        best = product;
+        bestHits = hits;
+        bestTight = tight;
       }
+    });
 
-      var compactName = products[i].name
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
-
-      if (compactName && text.indexOf(compactName) !== -1) {
-        return products[i];
-      }
-    }
-
-    return null;
+    return best;
   }
 
   // Read existing customer inquiries
@@ -112,6 +191,28 @@
     })[0];
   }
 
+  // The built-in answers are English only. If the customer writes in another
+  // language (Tagalog, Cebuano, Spanish, Chinese, Arabic, ...), skip them and
+  // let Gemini answer in the customer's own language.
+  var ENGLISH_HINT =
+    /\b(the|you|your|yours|have|has|how|much|many|what|when|where|which|who|is|are|do|does|can|could|would|please|thanks|thank|stock|price|cost|available|delivery|deliver|shipping|payment|pay|order|orders|hours|open|address|location|warranty|return|refund|staff|human|agent|person|hello|hi|hey|check|product|products|pickup|gcash|bank|cash|back|bot)\b/i;
+
+  function looksEnglish(text) {
+    var asciiOnly = !/[^\u0000-\u007F]/.test(text);
+    return asciiOnly && ENGLISH_HINT.test(text);
+  }
+
+  // Professional stock reply used for every product lookup
+  function stockReply(product) {
+    return (
+      "Thank you for your inquiry. Our " +
+      product.name +
+      " is currently: " +
+      D.stateLabel(product).toLowerCase() +
+      ". Would you like to know about our delivery or payment options?"
+    );
+  }
+
   // Local answers for questions the website can answer accurately
   function localReply(message) {
     var text = message.toLowerCase();
@@ -122,13 +223,7 @@
       var product = findProduct(text);
 
       if (product) {
-        return {
-          text:
-            product.name +
-            ": " +
-            D.stateLabel(product).toLowerCase() +
-            "."
-        };
+        return { text: stockReply(product) };
       }
     }
 
@@ -136,7 +231,7 @@
     if (/staff|human|agent|person|representative|talk to/.test(text)) {
       return {
         text:
-          "I'll pass this to a Densco team member. They will answer right here.",
+          "Certainly. I am connecting you with a Densco team member, who will reply to you here shortly.",
         esc: true
       };
     }
@@ -146,21 +241,46 @@
       var match = findProduct(text);
 
       if (match) {
-        return {
-          text:
-            match.name +
-            ": " +
-            D.stateLabel(match).toLowerCase() +
-            "."
-        };
+        return { text: stockReply(match) };
       }
 
       awaitingProductName = true;
 
       return {
         text:
-          "Which product should I check? Type the product name, for example: hospital bed, oxygen cart, stretcher, IV stand or medicine cabinet."
+          "Certainly. Which product would you like me to check? Please type the product name, for example: hospital bed, oxygen cart, stretcher, IV stand or medicine cabinet."
       };
+    }
+
+    // If the message mentions a known product, answer from live data
+    var mentioned = findProduct(text);
+
+    if (mentioned) {
+      // Price questions: only answer if the product really has a price
+      if (/price|cost|how much|magkano/.test(text)) {
+        if (
+          mentioned.price !== undefined &&
+          mentioned.price !== null &&
+          mentioned.price !== ""
+        ) {
+          return {
+            text:
+              "The " +
+              mentioned.name +
+              " is priced at PHP " +
+              Number(mentioned.price).toLocaleString("en-PH") +
+              ". Current availability: " +
+              D.stateLabel(mentioned).toLowerCase() +
+              ". Would you like to know about our delivery or payment options?"
+          };
+        }
+        return null; // let the AI answer from the business data
+      }
+
+      // Availability questions
+      if (/have|got|sell|buy/.test(text)) {
+        return { text: stockReply(mentioned) };
+      }
     }
 
     // Fixed FAQ responses
@@ -178,13 +298,15 @@
 
   // Call the PHP API that securely communicates with Gemini
   function askAI(message) {
-    return fetch("/api/chatbot.php", {
+    return fetch(API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        message: message
+        message: message,
+        history: history,
+        context: buildContext()
       })
     })
       .then(function (response) {
@@ -246,13 +368,14 @@
           '<button class="cb-x" id="cbX" aria-label="Close chat">&times;</button>' +
         '</div>' +
         '<div class="cb-msgs" id="cbMsgs">' +
-          '<div class="cb-m bot">Hi! Ask about product stock, delivery, payment or your orders.</div>' +
+          '<div class="cb-m bot">' + GREETING + '</div>' +
         '</div>' +
         '<div class="cb-chips" id="cbChips">' +
           '<button>Check stock</button>' +
           '<button>Delivery and pickup</button>' +
           '<button>Payment options</button>' +
           '<button>Talk to staff</button>' +
+          '<button>Back to bot</button>' +
         '</div>' +
         '<form class="cb-form" id="cbForm">' +
           '<input id="cbIn" placeholder="Type a message" autocomplete="off">' +
@@ -287,7 +410,15 @@
   // Restore an existing staff inquiry, if one exists
   try {
     var sessionId = sessionStorage.getItem(SESS);
+    var owner = sessionStorage.getItem(OWNER);
     var existing = sessionId && find(sessionId);
+
+    // A chat that belongs to a different account (or to the guest) is not shown
+    if (existing && owner !== whoKey) {
+      sessionStorage.removeItem(SESS);
+      sessionStorage.removeItem(OWNER);
+      existing = null;
+    }
 
     if (existing) {
       active = sessionId;
@@ -331,6 +462,7 @@
 
     try {
       sessionStorage.setItem(SESS, inquiry.id);
+      sessionStorage.setItem(OWNER, whoKey);
     } catch (error) {
       console.warn("Could not save chat session:", error);
     }
@@ -341,6 +473,17 @@
     if (busy) return;
 
     add(message, "user");
+
+    // NEW: let the customer leave staff mode and return to the assistant
+    if (/^(back to bot|bot|assistant)$/i.test(message.trim())) {
+      active = null;
+      try {
+        sessionStorage.removeItem(SESS);
+        sessionStorage.removeItem(OWNER);
+      } catch (error) {}
+      add("Welcome back. This is the Densco Assistant. How may I help you?", "bot");
+      return;
+    }
 
     // If already connected to staff, save the customer's message
     if (active) {
@@ -359,13 +502,19 @@
       });
 
       D.put(KEY, all);
+      add("Your message has been sent. A Densco team member will reply here shortly. You may type \"back to bot\" to return to the assistant.", "bot");
       return;
     }
 
     // First try local FAQ and stock responses
-    var local = localReply(message);
+    // Built-in answers only for English; other languages go to Gemini
+    var local = looksEnglish(message) ? localReply(message) : null;
 
     if (local) {
+      // Remember local answers too, so the AI knows the full chat
+      remember("user", message);
+      remember("model", local.text);
+
       setTimeout(function () {
         add(local.text, "bot");
 
@@ -385,12 +534,16 @@
     askAI(message)
       .then(function (answer) {
         typing.textContent = answer;
+
+        // Save this exchange for the next question
+        remember("user", message);
+        remember("model", answer);
       })
       .catch(function (error) {
         console.error("Chatbot AI error:", error);
 
         typing.textContent =
-          "I can't answer that right now, so I'm connecting you with a Densco team member. They will reply right here.";
+          "I apologize, I am unable to answer that at the moment. I am connecting you with a Densco team member, who will reply to you here shortly.";
 
         escalate(message);
       })
@@ -429,8 +582,34 @@
     }
   };
 
+  // Start a fresh chat (used when the user logs in or out)
+  function resetChat() {
+    active = null;
+    seen = 0;
+    busy = false;
+    awaitingProductName = false;
+    history = [];
+
+    try {
+      sessionStorage.removeItem(SESS);
+      sessionStorage.removeItem(OWNER);
+    } catch (error) {}
+
+    msgs.innerHTML = "";
+    add(GREETING, "bot");
+  }
+
   // Check for staff replies to the active inquiry
   setInterval(function () {
+    // If the account changed (login or logout), start a clean chat
+    var nowUser = currentUser();
+    if (userKey(nowUser) !== whoKey) {
+      who = nowUser;
+      whoKey = userKey(nowUser);
+      resetChat();
+      return;
+    }
+
     if (!active) return;
 
     var inquiry = find(active);
