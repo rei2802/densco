@@ -10,7 +10,6 @@
 
   var D = window.DHP;
   var KEY = "denscoInquiries";
-  var SESS = "denscoActiveInquiry";
   var POLL = 4000;
 
   // Path to the PHP file. It starts with "/" so it works from ANY page
@@ -19,14 +18,13 @@
   // On a live website at the domain root, change this to "/api/chatbot.php".
   var API_URL = "/densco/Densco1-main/api/chatbot.php";
 
-  var OWNER = "denscoActiveInquiryOwner";
   var GREETING =
     "Good day! I am the Densco Assistant. How may I help you with product availability, delivery, payment or your orders?";
 
   // A plain-text identity for whoever is using the site right now,
   // so a chat can be tied to one account (or to the guest).
   function currentUser() {
-    return D.user() || "Guest visitor";
+    return D.user() || GUEST;
   }
 
   function userKey(user) {
@@ -36,8 +34,17 @@
     return String(user);
   }
 
+  var GUEST = "Guest visitor";
+  var LOGIN_MSG =
+    "Chatting with our team is available to logged-in customers. Please log in to your Densco account to continue, or message us on Viber or Messenger. In the meantime, I will gladly answer your questions about our products, delivery and payment.";
+
   var who = currentUser();
   var whoKey = userKey(who);
+
+  // Only logged-in customers can reach the staff (admin) chat
+  function isLoggedIn() {
+    return whoKey !== GUEST;
+  }
   var awaitingProductName = false;
   var active = null;
   var seen = 0;
@@ -74,6 +81,11 @@
         "Delivery: Metro Manila delivery takes 1 to 2 days. Free store pickup is available at the Quezon City warehouse.\n" +
         "Payment: GCash / QR PH, bank transfer and cash. GCash and bank transfer orders need proof of payment uploaded at checkout.\n" +
         "Warranty: Most items carry a 1-year manufacturer warranty. For returns or replacements, customers message Densco on Viber or Messenger.\n" +
+        "Customer account: " +
+        (isLoggedIn()
+          ? "logged in. The customer can type 'talk to staff' to chat with the Densco team."
+          : "guest, not logged in. Staff chat is only available after logging in, so ask the customer to log in first or to contact Densco on Viber or Messenger.") +
+        "\n" +
         "Products and live stock:\n" + lines.join("\n")
       );
     } catch (error) {
@@ -394,8 +406,50 @@
   var msgs = document.getElementById("cbMsgs");
   var input = document.getElementById("cbIn");
 
+  // ---- Chat storage -------------------------------------------------
+  // Logged-in customers: the chat is saved under their account and is still
+  // there after a refresh or the next time they log in.
+  // Guests: nothing is saved. A refresh starts a brand new chat.
+  function storageKey() {
+    return "denscoChat:" + whoKey;
+  }
+
+  // Save everything currently shown in the chat window
+  function save() {
+    if (!isLoggedIn()) return;
+
+    try {
+      var list = [];
+
+      Array.prototype.forEach.call(msgs.children, function (el) {
+        if (el.textContent === "Typing...") return;
+
+        list.push({
+          sender: el.classList.contains("user")
+            ? "user"
+            : el.classList.contains("staff")
+            ? "staff"
+            : "bot",
+          text: el.textContent
+        });
+      });
+
+      localStorage.setItem(
+        storageKey(),
+        JSON.stringify({
+          messages: list.slice(-100),
+          history: history,
+          active: active,
+          seen: seen
+        })
+      );
+    } catch (error) {
+      console.warn("Could not save chat:", error);
+    }
+  }
+
   // Display a message in the chat
-  function add(message, sender) {
+  function add(message, sender, skipSave) {
     var element = document.createElement("div");
 
     element.className = "cb-m " + sender;
@@ -404,40 +458,56 @@
     msgs.appendChild(element);
     msgs.scrollTop = msgs.scrollHeight;
 
+    if (!skipSave) save();
+
     return element;
   }
 
-  // Restore an existing staff inquiry, if one exists
-  try {
-    var sessionId = sessionStorage.getItem(SESS);
-    var owner = sessionStorage.getItem(OWNER);
-    var existing = sessionId && find(sessionId);
+  // Load the saved chat of whoever is using the site right now
+  function loadChat() {
+    active = null;
+    seen = 0;
+    busy = false;
+    awaitingProductName = false;
+    history = [];
+    msgs.innerHTML = "";
 
-    // A chat that belongs to a different account (or to the guest) is not shown
-    if (existing && owner !== whoKey) {
-      sessionStorage.removeItem(SESS);
-      sessionStorage.removeItem(OWNER);
-      existing = null;
+    var saved = null;
+
+    try {
+      // Remove any guest chat saved by an earlier version of this script
+      sessionStorage.removeItem("denscoChatGuest");
+
+      if (isLoggedIn()) {
+        saved = JSON.parse(localStorage.getItem(storageKey()) || "null");
+      }
+    } catch (error) {
+      saved = null;
     }
 
-    if (existing) {
-      active = sessionId;
-
-      existing.messages.forEach(function (message) {
-        add(
-          message.text,
-          message.sender === "staff" ? "staff" : "user"
-        );
+    if (saved && saved.messages && saved.messages.length) {
+      saved.messages.forEach(function (m) {
+        add(m.text, m.sender, true);
       });
 
-      seen = existing.messages.length;
+      history = saved.history || [];
+
+      // Reconnect to the staff conversation (logged-in customers only)
+      if (isLoggedIn() && saved.active && find(saved.active)) {
+        active = saved.active;
+        seen = saved.seen || 0;
+      }
+    } else {
+      add(GREETING, "bot", true);
     }
-  } catch (error) {
-    console.warn("Could not restore chat session:", error);
   }
+
+  loadChat();
 
   // Create a staff inquiry and save it using the existing website storage
   function escalate(message) {
+    if (!isLoggedIn()) return;
+
     var all = read();
 
     var inquiry = {
@@ -459,13 +529,7 @@
 
     active = inquiry.id;
     seen = 1;
-
-    try {
-      sessionStorage.setItem(SESS, inquiry.id);
-      sessionStorage.setItem(OWNER, whoKey);
-    } catch (error) {
-      console.warn("Could not save chat session:", error);
-    }
+    save();
   }
 
   // Send a customer message
@@ -474,13 +538,9 @@
 
     add(message, "user");
 
-    // NEW: let the customer leave staff mode and return to the assistant
+    // Let the customer leave staff mode and return to the assistant
     if (/^(back to bot|bot|assistant)$/i.test(message.trim())) {
       active = null;
-      try {
-        sessionStorage.removeItem(SESS);
-        sessionStorage.removeItem(OWNER);
-      } catch (error) {}
       add("Welcome back. This is the Densco Assistant. How may I help you?", "bot");
       return;
     }
@@ -506,19 +566,25 @@
       return;
     }
 
-    // First try local FAQ and stock responses
     // Built-in answers only for English; other languages go to Gemini
     var local = looksEnglish(message) ? localReply(message) : null;
 
     if (local) {
-      // Remember local answers too, so the AI knows the full chat
+      var wantsStaff = local.esc;
+
+      // Guests cannot open a staff chat: ask them to log in instead
+      if (wantsStaff && !isLoggedIn()) {
+        local.text = LOGIN_MSG;
+        wantsStaff = false;
+      }
+
       remember("user", message);
       remember("model", local.text);
 
       setTimeout(function () {
         add(local.text, "bot");
 
-        if (local.esc) {
+        if (wantsStaff) {
           escalate(message);
         }
       }, 300);
@@ -529,27 +595,31 @@
     // Otherwise, request a Gemini AI response
     busy = true;
 
-    var typing = add("Typing...", "bot");
+    var typing = add("Typing...", "bot", true);
 
     askAI(message)
       .then(function (answer) {
         typing.textContent = answer;
 
-        // Save this exchange for the next question
         remember("user", message);
         remember("model", answer);
       })
       .catch(function (error) {
         console.error("Chatbot AI error:", error);
 
-        typing.textContent =
-          "I apologize, I am unable to answer that at the moment. I am connecting you with a Densco team member, who will reply to you here shortly.";
-
-        escalate(message);
+        if (isLoggedIn()) {
+          typing.textContent =
+            "I apologize, I am unable to answer that at the moment. I am connecting you with a Densco team member, who will reply to you here shortly.";
+          escalate(message);
+        } else {
+          typing.textContent =
+            "I apologize, I am unable to answer that at the moment. Please log in to chat with our team, or message us on Viber or Messenger.";
+        }
       })
       .then(function () {
         busy = false;
         msgs.scrollTop = msgs.scrollHeight;
+        save();
       });
   }
 
@@ -582,31 +652,14 @@
     }
   };
 
-  // Start a fresh chat (used when the user logs in or out)
-  function resetChat() {
-    active = null;
-    seen = 0;
-    busy = false;
-    awaitingProductName = false;
-    history = [];
-
-    try {
-      sessionStorage.removeItem(SESS);
-      sessionStorage.removeItem(OWNER);
-    } catch (error) {}
-
-    msgs.innerHTML = "";
-    add(GREETING, "bot");
-  }
-
-  // Check for staff replies to the active inquiry
+  // Check for staff replies, and for login or logout without a page reload
   setInterval(function () {
-    // If the account changed (login or logout), start a clean chat
     var nowUser = currentUser();
+
     if (userKey(nowUser) !== whoKey) {
       who = nowUser;
       whoKey = userKey(nowUser);
-      resetChat();
+      loadChat();
       return;
     }
 
@@ -616,12 +669,17 @@
 
     if (!inquiry) return;
 
+    var changed = false;
+
     for (var i = seen; i < inquiry.messages.length; i++) {
       if (inquiry.messages[i].sender === "staff") {
-        add(inquiry.messages[i].text, "staff");
+        add(inquiry.messages[i].text, "staff", true);
+        changed = true;
       }
     }
 
     seen = inquiry.messages.length;
+
+    if (changed) save();
   }, POLL);
 })();
