@@ -1,6 +1,6 @@
 <?php
-// Restock API (Admin and Inventory Staff): lists products and records a restock, adding the
-// quantity to products.stock_quantity (the same value the shop displays).
+// Restock API (Owner, Admin, Inventory Staff): lists products, records a restock with no
+// approval step (stock updates immediately), and returns the full restock history.
 session_start();
 
 function json_out($code, $payload) {
@@ -13,7 +13,7 @@ function json_out($code, $payload) {
 
 $role = $_SESSION['staff_role'] ?? null;
 if (!$role) json_out(401, ['success' => false, 'error' => 'Please log in again.']);
-if (!in_array($role, ['admin', 'inventory'], true)) json_out(403, ['success' => false, 'error' => 'Only the Administrator or Inventory Staff can restock.']);
+if (!in_array($role, ['owner', 'admin', 'inventory'], true)) json_out(403, ['success' => false, 'error' => 'Only Owner, Administrator, or Inventory Staff can restock.']);
 
 $inTx = false;
 
@@ -80,6 +80,46 @@ try {
             'product' => $p['product_name'],
             'stock'   => (int)$p['stock_quantity'] + $quantity,
         ]);
+    }
+
+    // Restock history: visible to Owner, Administrator, and Inventory Staff
+    if (isset($_GET['history'])) {
+        $conn->query("CREATE TABLE IF NOT EXISTS restocks (
+            restock_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            product_id INT NOT NULL,
+            supplier_name VARCHAR(150) NOT NULL,
+            quantity INT NOT NULL,
+            restock_date DATE NOT NULL,
+            notes TEXT NULL,
+            staff_id INT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY product_id (product_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        $history = [];
+        $res = $conn->query(
+            "SELECT r.restock_id, r.product_id, p.product_name, r.supplier_name, r.quantity,
+                    r.restock_date, r.notes, s.first_name, s.last_name, r.created_at
+             FROM restocks r
+             LEFT JOIN products p ON p.product_id = r.product_id
+             LEFT JOIN staff s ON s.staff_id = r.staff_id
+             ORDER BY r.created_at DESC, r.restock_id DESC
+             LIMIT 500"
+        );
+        while ($r = $res->fetch_assoc()) {
+            $staffName = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? ''));
+            $history[] = [
+                'id'       => (int)$r['restock_id'],
+                'product'  => $r['product_name'] ?? '(deleted product)',
+                'supplier' => $r['supplier_name'],
+                'quantity' => (int)$r['quantity'],
+                'date'     => $r['restock_date'],
+                'notes'    => $r['notes'],
+                'staff'    => $staffName !== '' ? $staffName : '—',
+                'created'  => $r['created_at'],
+            ];
+        }
+        json_out(200, ['success' => true, 'history' => $history]);
     }
 
     // Product list for the form: the same products currently listed in the shop (hidden = 0)
