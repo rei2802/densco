@@ -54,5 +54,5 @@ try {
         . 'configuration and ensure MySQL is running.'
     );
 }
-?>
+
 
