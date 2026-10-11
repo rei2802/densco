@@ -276,10 +276,6 @@ while ($row = $res->fetch_assoc()) {
           <p class="muted">Product catalog, stock control and restock requests, synced with online stock.</p>
         </div>
 
-        <div class="note info">
-          You can edit product details and request restocks. Stock quantities are updated through the Restock page.
-        </div>
-
         <div class="toolbar">
           <input id="q" type="search" placeholder="Search products">
         </div>
