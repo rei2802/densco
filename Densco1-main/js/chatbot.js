@@ -390,9 +390,18 @@
           '<button>Back to bot</button>' +
         '</div>' +
         '<form class="cb-form" id="cbForm">' +
-          '<input id="cbIn" placeholder="Type a message" autocomplete="off">' +
-          '<button type="submit" class="btn btn-red btn-sm">Send</button>' +
-        '</form>' +
+  '<input id="cbIn" placeholder="Type a message" autocomplete="off">' +
+          '<button type="button" id="cbMic" class="cb-mic" aria-label="Hold to talk" title="Hold to talk">' +
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+              '<rect x="9" y="3" width="6" height="11" rx="3"/>' +
+              '<path d="M5 11a7 7 0 0 0 14 0"/>' +
+              '<path d="M12 18v3"/>' +
+              '<path d="M9 21h6"/>' +
+            '</svg>' +
+          '</button>' +
+            '<button type="submit" class="btn btn-red btn-sm">Send</button>' +
+'</form>' +
+       
       '</div>' +
       '<button class="cb-fab" id="cbFab" aria-label="Open chat">' +
         '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">' +
@@ -651,6 +660,90 @@
       send(event.target.textContent);
     }
   };
+
+
+    // ===== VOICE CODE =====
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var mic = document.getElementById("cbMic");
+
+  if (!SR) {
+    mic.style.display = "none";
+  } else {
+    var rec = new SR();
+    var heard = "";
+    var listening = false;
+    var safety = null;
+
+    rec.lang = "en-PH";            // "fil-PH" for Tagalog
+    rec.interimResults = true;
+    rec.continuous = true;
+
+    function resetMic() {
+      listening = false;
+      mic.classList.remove("rec");
+      clearTimeout(safety);
+    }
+
+    function stopMic() {
+      if (!listening) return;
+      try { rec.stop(); } catch (e) {}
+      setTimeout(function () {
+        if (listening) {
+          try { rec.abort(); } catch (e) {}
+          resetMic();
+        }
+      }, 1500);
+    }
+
+    rec.onresult = function (e) {
+      heard = Array.prototype.map.call(e.results, function (r) {
+        return r[0].transcript;
+      }).join("");
+      input.value = heard;
+    };
+
+    rec.onend = function () {
+      var text = heard.trim();
+      heard = "";
+      resetMic();
+      if (text) {
+        input.value = "";
+        send(text);
+      }
+    };
+
+    rec.onerror = function () {
+      heard = "";
+      resetMic();
+    };
+
+    function startMic(e) {
+      e.preventDefault();
+      if (listening) return;
+      heard = "";
+      try {
+        rec.start();
+        listening = true;
+        mic.classList.add("rec");
+        if (mic.setPointerCapture && e.pointerId !== undefined) {
+          try { mic.setPointerCapture(e.pointerId); } catch (err) {}
+        }
+        safety = setTimeout(stopMic, 30000);
+      } catch (err) {
+        resetMic();
+      }
+    }
+
+    mic.addEventListener("pointerdown", startMic);
+    mic.addEventListener("pointerup", stopMic);
+    mic.addEventListener("pointercancel", stopMic);
+    mic.addEventListener("lostpointercapture", stopMic);
+    window.addEventListener("pointerup", stopMic);
+    window.addEventListener("blur", stopMic);
+    mic.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  }
+  // ===== END VOICE CODE =====
+
 
   // Check for staff replies, and for login or logout without a page reload
   setInterval(function () {
