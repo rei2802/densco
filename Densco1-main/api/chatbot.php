@@ -37,6 +37,7 @@ $systemText =
 "- For questions about Densco products, stock, prices, delivery, payment, hours or location, answer ONLY from the BUSINESS DATA below.\n" .
 "- If the answer is not in the business data, do not guess. Politely say you are unable to confirm it and offer to connect the customer with a Densco team member. Tell them to type 'talk to staff'.\n" .
 "- Never invent prices, stock numbers, specs or policies.\n" .
+"- For questions about where to find things on the website, use the 'Website guide' in the BUSINESS DATA and explain the steps in simple words.\n" .
 "- Do not give medical advice. For unrelated questions, politely explain that you can only assist with Densco products and services.\n" .
 "- Use plain text only, no markdown, no emojis.\n\n" .
 "BUSINESS DATA:\n" . ($context !== '' ? $context : '(none available)');

@@ -58,6 +58,10 @@
     if (history.length > 12) history.shift();
   }
 
+    function categoryList() {
+    try { return (D.categories || []).join(", "); } catch (e) { return ""; }
+  }
+  
   // Gives the AI your real business info, live stock levels and policies
   function buildContext() {
     try {
@@ -86,6 +90,13 @@
           ? "logged in. The customer can type 'talk to staff' to chat with the Densco team."
           : "guest, not logged in. Staff chat is only available after logging in, so ask the customer to log in first or to contact Densco on Viber or Messenger.") +
         "\n" +
+                "Website guide (how customers navigate the site):\n" +
+        "- Home page: search bar, browse by category, and business information.\n" +
+        "- Catalog page: shows all products. Customers can filter by category (" + categoryList() + ") or search by product name. For example, the Stretcher / Ambulance category lists stretchers.\n" +
+        "- Product page: click any product name or image to see its price, description, live stock and Add to Cart.\n" +
+        "- Cart and Checkout: add items to the cart, then check out and choose delivery or store pickup and a payment method.\n" +
+        "- My Account / My Orders: track order status from Pending to Completed.\n" +
+        "- Login and Register: needed for placing orders and chatting with staff.\n\n" +
         "Products and live stock:\n" + lines.join("\n")
       );
     } catch (error) {
@@ -112,7 +123,7 @@
       "You may track your order status, from Pending to Completed, under My Account."
     ],
     [
-      /hours|open|location|address|where/,
+            /business hours|opening hours|store hours|are you open|open (today|on|until|at)|what time|when do you (open|close)|closing|location|address|located|where are you/,
       "Our business hours are " +
         D.biz().hours.toLowerCase() +
         ". We are located at " +
@@ -246,6 +257,11 @@
           "Certainly. I am connecting you with a Densco team member, who will reply to you here shortly.",
         esc: true
       };
+    }
+
+        // Website navigation questions go to Gemini, which has the site guide
+    if (/navigate|find|see it|where can|where do|where is|how do i|how can i|browse|which page|what page|website|link|go to|click|menu|section|categor/.test(text)) {
+      return null;
     }
 
     // Stock lookup
