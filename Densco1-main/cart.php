@@ -67,7 +67,18 @@ while ($row = $res->fetch_assoc()) {
 
           <div class="field">
             <label for="phone">Contact phone</label>
-            <input id="phone" placeholder="09XX XXX XXXX">
+            <input
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  inputmode="numeric"
+                  placeholder="09XX XXX XXXX"
+                  maxlength="11"
+                  minlength="11"
+                  pattern="09[0-9]{9}"
+                  title="Enter an 11-digit mobile number starting with 09"
+                  oninput="this.value = this.value.replace(/\D/g, '').slice(0, 11)"
+                  required>
           </div>
 
           <h3 class="mt2">Payment</h3>

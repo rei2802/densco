@@ -67,8 +67,7 @@
     try {
       var biz = D.biz();
       var lines = D.products().map(function (product) {
-        var line = "- " + product.name + ": " + D.stateLabel(product);
-
+        var line = "- " + product.name + " (" + (product.cat || "General") + "): " + D.stateLabel(product);
         // Optional fields: only added if your products have them
         if (product.price !== undefined && product.price !== null && product.price !== "") {
           line += ", price: PHP " + product.price;
@@ -257,6 +256,15 @@
           "Certainly. I am connecting you with a Densco team member, who will reply to you here shortly.",
         esc: true
       };
+    }
+
+        // General product-knowledge questions ("what is a nebulizer?", "what is it used for?")
+    // go to Gemini, unless the customer is really asking about price or stock
+    var asksInfo = /what is|what's|what are|what does|what do|ano (ang|ba)|ano po|explain|describe|meaning of|used for|use of|uses of|purpose|how does|how do|difference between|tell me about|benefits|features/.test(text);
+    var asksBusinessFact = /price|cost|how much|magkano|stock|available|availability|inventory|how many/.test(text);
+
+    if (asksInfo && !asksBusinessFact) {
+      return null;
     }
 
         // Website navigation questions go to Gemini, which has the site guide
