@@ -80,7 +80,7 @@ unset($p);
         <button class="btn btn-line" id="catToggle" type="button">See all</button>
       </div>
       <h2 class="sec">Business information</h2>
-      <div class="grid4" id="biz"></div>
+      <div class="info" id="biz"></div>
     </main>
     <footer class="ftr" id="siteFooter"></footer>
     <script>window.DHP_PRODUCTS = <?php echo json_encode($products); ?>;</script>
@@ -166,9 +166,11 @@ unset($p);
       ]
         .map(
           (i) =>
-            `<div class="info"><h4>${i[0]}</h4><p>${DHP.esc(i[1])}</p></div>`,
+            `<div><h4>${i[0]}</h4><p>${DHP.esc(i[1])}</p></div>`,
         )
         .join("");
+      document.getElementById("biz").style.cssText =
+        "display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px 28px";
     </script>
   </body>
 </html>
