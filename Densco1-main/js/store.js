@@ -141,6 +141,22 @@
     return D.isAvailable(p) && p.stock > 0;
   };
 
+  // Best-Selling Products: ranked by units actually sold (order_items),
+  // which each PHP page attaches to every product as `sold`. Only
+  // products the customer can currently buy are offered here, so the
+  // "add to cart" action in this section is never a dead end.
+  D.bestSellers = function (limit) {
+    limit = limit || 8;
+    return D.products()
+      .filter(function (p) {
+        return !p.hidden && D.canOrder(p) && p.sold > 0;
+      })
+      .sort(function (a, b) {
+        return b.sold - a.sold;
+      })
+      .slice(0, limit);
+  };
+
   D.cart = function () {
     return get("denscoCart", []);
   };
