@@ -32,7 +32,7 @@
 
   // Pages converted to real PHP/database pages so far. Anything not listed here
   // still defaults to .html. Add to this list as more staff pages get converted.
-  var PHP_PAGES = { inventory: true, orders: true };
+  var PHP_PAGES = { inventory: true, orders: true, "sales-records": true };
 
   function ext(key) {
     return PHP_PAGES[key] ? ".php" : ".html";
