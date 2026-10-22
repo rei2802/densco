@@ -150,7 +150,7 @@ while ($row = $res->fetch_assoc()) {
           `</div>` +
           `<div class="qty">` +
             `<button data-act="minus" data-id="${l.p.id}">−</button>` +
-            `<input value="${l.qty}" readonly>` +
+            `<input class="qty-input" type="number" min="1" max="${l.p.stock}" step="1" value="${l.qty}" data-id="${l.p.id}">` +
             `<button data-act="plus" data-id="${l.p.id}">+</button>` +
           `</div>` +
           `<div class="right">` +
@@ -199,6 +199,27 @@ while ($row = $res->fetch_assoc()) {
       });
 
       if (b.dataset.act === "rm") c = c.filter((i) => i.id !== id);
+
+      DHP.saveCart(c);
+      render();
+    });
+
+    $("items").addEventListener("change", (e) => {
+      const inp = e.target.closest(".qty-input");
+      if (!inp) return;
+
+      const id = +inp.dataset.id;
+      const P = DHP.products();
+      const max = P.find((x) => x.id === id).stock;
+      let qty = Math.floor(+inp.value);
+
+      if (!qty || qty < 1) qty = 1;
+      if (qty > max) qty = max;
+
+      let c = DHP.cart();
+      c.forEach((i) => {
+        if (i.id === id) i.qty = qty;
+      });
 
       DHP.saveCart(c);
       render();
@@ -267,7 +288,7 @@ while ($row = $res->fetch_assoc()) {
         }
 
         DHP.saveCart([]);
-        alert("Order placed successfully!\nOrder ID: " + data.order_id);
+        alert("Order placed successfully!\nOrder ID: " + data.sorder_id);
         location.href = "account.html";
       } catch (error) {
         console.error(error);
