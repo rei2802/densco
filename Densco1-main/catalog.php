@@ -4,7 +4,7 @@ require_once 'config.php';
 // Fetch all products from the database and shape them to match
 // the {id, name, cat, price, stock, desc} shape the front-end JS expects.
 $products = [];
-$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path FROM products WHERE hidden = 0");
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path, availability_status FROM products WHERE hidden = 0");
 while ($row = $res->fetch_assoc()) {
     $products[] = [
         "id"    => (int)$row["product_id"],
@@ -14,6 +14,7 @@ while ($row = $res->fetch_assoc()) {
         "stock" => (int)$row["stock_quantity"],
         "desc"  => $row["description"],
         "image" => $row["image_path"] ?: null,
+        "avail" => $row["availability_status"] ?: "in_stock",
     ];
 }
 ?>
@@ -80,10 +81,10 @@ while ($row = $res->fetch_assoc()) {
           `<div class="pbody">` +
             `<div class="pcat">${p.cat}</div>` +
             `<a class="pname" href="product.php?id=${p.id}">${DHP.esc(p.name)}</a>` +
-            `<div class="stock ${DHP.state(p)}">${DHP.stateLabel(p)}</div>` +
+            `<div class="stock ${DHP.shopState(p)}">${DHP.shopStateLabel(p)}</div>` +
             `<div class="pfoot">` +
               `<span class="price">${DHP.peso(p.price)}</span>` +
-              `<button class="btn btn-red btn-sm" data-add="${p.id}" ${p.stock <= 0 ? "disabled" : ""}>Add to Cart</button>` +
+              `<button class="btn btn-red btn-sm" data-add="${p.id}" ${DHP.canOrder(p) ? "" : "disabled"}>Add to Cart</button>` +
             `</div>` +
           `</div>` +
         `</article>`

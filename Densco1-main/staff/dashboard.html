@@ -113,6 +113,19 @@
             : '<p class="muted">No orders yet.</p>';
         })
         .catch(() => {});
+
+      // Real product count from the database (this page is static HTML, so
+      // DHP.products() above is always empty — it was showing "0 items" on
+      // all three dashboards). Matches the count shown on the Shop (products
+      // that aren't hidden).
+      fetch("inventory.php?summary=1", { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!d || !d.success) return;
+          const nodes = document.querySelectorAll("#kpis .kpi b");
+          if (nodes[1]) nodes[1].textContent = d.total + " items";
+        })
+        .catch(() => {});
     </script>
   </body>
 </html>

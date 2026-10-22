@@ -142,6 +142,12 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 
 .stock{font-size:12.5px;font-weight:600;color:var(--ok)}
 
+.stock.low{color:var(--warn)}
+
+.stock.out,.stock.unavailable{color:var(--red)}
+
+.badge.unavailable{background:#FEE2E2;color:#991B1B}
+
 .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:24px}
 
 .page-head p{margin-top:4px}
@@ -652,6 +658,12 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .badge.shipped{background:#EDE9FE;color:#5B21B6}
 
 .stock{font-size:12.5px;font-weight:600;color:var(--ok)}
+
+.stock.low{color:var(--warn)}
+
+.stock.out,.stock.unavailable{color:var(--red)}
+
+.badge.unavailable{background:#FEE2E2;color:#991B1B}
 
 .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:24px}
 

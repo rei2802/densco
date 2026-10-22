@@ -2,7 +2,7 @@
 require_once 'config.php';
 
 $products = [];
-$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path FROM products WHERE hidden = 0");
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path, availability_status FROM products WHERE hidden = 0");
 while ($row = $res->fetch_assoc()) {
     $products[] = [
         "id"    => (int)$row["product_id"],
@@ -12,6 +12,7 @@ while ($row = $res->fetch_assoc()) {
         "stock" => (int)$row["stock_quantity"],
         "desc"  => $row["description"],
         "image" => $row["image_path"] ?: null,
+        "avail" => $row["availability_status"] ?: "in_stock",
     ];
 }
 ?>
@@ -67,12 +68,12 @@ while ($row = $res->fetch_assoc()) {
           `<div class="pcat">${p.cat}</div>` +
           `<h1>${DHP.esc(p.name)}</h1>` +
           `<span class="price">${DHP.peso(p.price)}</span>` +
-          `<div class="stock ${DHP.state(p)}">${DHP.stateLabel(p)}</div>` +
+          `<div class="stock ${DHP.shopState(p)}">${DHP.shopStateLabel(p)}</div>` +
           `<p class="pd-desc">${DHP.esc(p.desc)}</p>` +
           `<div class="flex"><b>Quantity</b><div class="qty"><button id="m">−</button><input id="q" value="1" readonly><button id="pl">+</button></div></div>` +
           `<div class="flex mt">` +
-            `<button class="btn btn-red btn-lg" id="now" ${p.stock <= 0 ? "disabled" : ""}>Order Now</button>` +
-            `<button class="btn btn-line btn-lg" id="add" ${p.stock <= 0 ? "disabled" : ""}>Add to Cart</button>` +
+            `<button class="btn btn-red btn-lg" id="now" ${DHP.canOrder(p) ? "" : "disabled"}>Order Now</button>` +
+            `<button class="btn btn-line btn-lg" id="add" ${DHP.canOrder(p) ? "" : "disabled"}>Add to Cart</button>` +
           `</div>` +
           `<p class="muted sm mt">Pickup at our Quezon City warehouse or delivery in Metro Manila (1 to 2 days). Pay by GCash / QR PH, bank transfer or cash.</p>` +
         `</div>`;
