@@ -26,13 +26,13 @@
     ["inquiries", "Inquiries", "admin"],
     ["sales-records", "Sales & Records", "owner admin"],
     ["staff", "Manage Accounts", "owner admin"],
-    ["reports", "Reports", "owner"],
+    ["reports", "Reports", "owner admin inventory"],
     ["settings", "Settings", "owner"]
   ];
 
   // Pages converted to real PHP/database pages so far. Anything not listed here
   // still defaults to .html. Add to this list as more staff pages get converted.
-  var PHP_PAGES = { inventory: true, orders: true, "sales-records": true };
+  var PHP_PAGES = { inventory: true, orders: true, "sales-records": true, reports: true };
 
   function ext(key) {
     return PHP_PAGES[key] ? ".php" : ".html";
