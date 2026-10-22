@@ -12,8 +12,23 @@ while ($row = $res->fetch_assoc()) {
         "stock" => (int)$row["stock_quantity"],
         "desc"  => $row["description"],
         "image" => $row["image_path"] ?: null,
+        "sold"  => 0,
     ];
 }
+
+// Tally units sold per product from order line items, so the homepage
+// can surface a real "Best-Selling Products" section.
+$soldByProduct = [];
+$soldRes = $conn->query(
+    "SELECT product_id, SUM(quantity) AS units_sold FROM order_items GROUP BY product_id"
+);
+while ($soldRow = $soldRes->fetch_assoc()) {
+    $soldByProduct[(int)$soldRow["product_id"]] = (int)$soldRow["units_sold"];
+}
+foreach ($products as &$p) {
+    $p["sold"] = $soldByProduct[$p["id"]] ?? 0;
+}
+unset($p);
 ?>
 <!doctype html>
 <html lang="en">
@@ -55,6 +70,10 @@ while ($row = $res->fetch_assoc()) {
           ><a class="chip" href="catalog.php">All products</a>
         </div>
       </section>
+      <section id="bestSellersSection" class="bestsellers hide">
+        <h2 class="sec">Best-Selling Products</h2>
+        <div class="pgrid" id="bestSellersGrid"></div>
+      </section>
       <h2 class="sec">Shop by category</h2>
       <div class="grid4 cat-grid" id="cats"></div>
       <div class="cat-more">
@@ -71,6 +90,51 @@ while ($row = $res->fetch_assoc()) {
     <script>
       const P = DHP.products().filter((p) => !p.hidden),
         B = DHP.biz();
+
+      function renderProductCard(p) {
+        const thumb = p.image
+          ? `<img src="${p.image}" alt="${DHP.esc(p.name)}" style="display:block;width:100%;height:100%;object-fit:cover">`
+          : "Product image";
+
+        return (
+          `<article class="pcard">` +
+            `<a class="pthumb" href="product.php?id=${p.id}" style="display:block;overflow:hidden;aspect-ratio:1/1">${thumb}</a>` +
+            `<div class="pbody">` +
+              `<div class="pcat">${p.cat}</div>` +
+              `<a class="pname" href="product.php?id=${p.id}">${DHP.esc(p.name)}</a>` +
+              `<div class="stock ${DHP.shopState(p)}">${DHP.shopStateLabel(p)}</div>` +
+              `<div class="pfoot">` +
+                `<span class="price">${DHP.peso(p.price)}</span>` +
+                `<button class="btn btn-red btn-sm" data-add="${p.id}" ${DHP.canOrder(p) ? "" : "disabled"}>Add to Cart</button>` +
+              `</div>` +
+            `</div>` +
+          `</article>`
+        );
+      }
+
+      function renderBestSellers() {
+        const bestSellers = DHP.bestSellers(4);
+        const section = document.getElementById("bestSellersSection");
+        section.classList.toggle("hide", !bestSellers.length);
+        if (!bestSellers.length) return;
+        document.getElementById("bestSellersGrid").innerHTML =
+          bestSellers.map(renderProductCard).join("");
+      }
+      renderBestSellers();
+
+      document.getElementById("bestSellersGrid").addEventListener("click", (e) => {
+        const b = e.target.closest("[data-add]");
+        if (!b) return;
+
+        if (!DHP.user()) {
+          location.href = "login.php?next=index.php";
+          return;
+        }
+
+        DHP.addToCart(+b.dataset.add, 1);
+        DHP.toast("Added to your cart");
+      });
+
       const CAT_LIMIT = 5;
       let catsExpanded = false;
       function renderCats() {

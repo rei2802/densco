@@ -15,8 +15,23 @@ while ($row = $res->fetch_assoc()) {
         "desc"  => $row["description"],
         "image" => $row["image_path"] ?: null,
         "avail" => $row["availability_status"] ?: "in_stock",
+        "sold"  => 0,
     ];
 }
+
+// Tally units sold per product from completed order line items, so the
+// Shop can surface a real "Best-Selling Products" section.
+$soldByProduct = [];
+$soldRes = $conn->query(
+    "SELECT product_id, SUM(quantity) AS units_sold FROM order_items GROUP BY product_id"
+);
+while ($soldRow = $soldRes->fetch_assoc()) {
+    $soldByProduct[(int)$soldRow["product_id"]] = (int)$soldRow["units_sold"];
+}
+foreach ($products as &$p) {
+    $p["sold"] = $soldByProduct[$p["id"]] ?? 0;
+}
+unset($p);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -34,6 +49,11 @@ while ($row = $res->fetch_assoc()) {
   <main class="page wrap">
 
     <div class="crumb"><a href="index.php">Home</a> / <span>Shop</span></div>
+
+    <section id="bestSellersSection" class="bestsellers hide">
+      <h2 class="sec">Best-Selling Products</h2>
+      <div class="pgrid" id="bestSellersGrid"></div>
+    </section>
 
     <div class="shop">
       <aside class="card side">
@@ -91,6 +111,28 @@ while ($row = $res->fetch_assoc()) {
       );
     }
 
+    function renderBestSellers() {
+      const bestSellers = DHP.bestSellers(8);
+
+      const section = $("bestSellersSection");
+      section.classList.toggle("hide", !bestSellers.length);
+      if (!bestSellers.length) return;
+      $("bestSellersGrid").innerHTML = bestSellers.map(renderProductCard).join("");
+    }
+
+    function handleAddToCart(e) {
+      const b = e.target.closest("[data-add]");
+      if (!b) return;
+
+      if (!DHP.user()) {
+        location.href = "login.php?next=catalog.php";
+        return;
+      }
+
+      DHP.addToCart(+b.dataset.add, 1);
+      DHP.toast("Added to your cart");
+    }
+
     function render() {
       const all = DHP.products().filter((p) => !p.hidden);
 
@@ -107,6 +149,8 @@ while ($row = $res->fetch_assoc()) {
       $("grid").innerHTML = L.length
         ? L.map(renderProductCard).join("")
         : '<div class="card empty" style="grid-column:1/-1">No products match your search. Try another name or category.</div>';
+
+      renderBestSellers();
     }
 
     $("q").addEventListener("input", (e) => {
@@ -122,18 +166,8 @@ while ($row = $res->fetch_assoc()) {
       }
     });
 
-    $("grid").addEventListener("click", (e) => {
-      const b = e.target.closest("[data-add]");
-      if (!b) return;
-
-      if (!DHP.user()) {
-        location.href = "login.php?next=catalog.php";
-        return;
-      }
-
-      DHP.addToCart(+b.dataset.add, 1);
-      DHP.toast("Added to your cart");
-    });
+    $("grid").addEventListener("click", handleAddToCart);
+    $("bestSellersGrid").addEventListener("click", handleAddToCart);
 
     render();
   </script>
