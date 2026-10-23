@@ -1,5 +1,6 @@
 <?php
-// Manage Accounts API: list all staff accounts, view details, create and delete accounts.
+// Manage Accounts API: list all staff accounts and view details (Owner + Admin).
+// Creating and deleting accounts is Owner-only; the check is enforced here on the server.
 session_start();
 
 function json_out($code, $payload) {
@@ -23,6 +24,11 @@ try {
         $in     = json_decode(file_get_contents('php://input'), true) ?: [];
         $action = $in['action'] ?? '';
         $id     = (int)($in['id'] ?? 0);
+
+        // Only the Owner may add or remove staff accounts
+        if (in_array($action, ['create', 'delete'], true) && $role !== 'owner') {
+            json_out(403, ['success' => false, 'error' => 'Only the Owner can create or delete staff accounts.']);
+        }
 
         if ($action === 'create') {
             $type  = $in['role'] ?? '';
@@ -122,7 +128,7 @@ try {
             'created' => $dt->format('M j, Y'),
         ];
     }
-    json_out(200, ['success' => true, 'accounts' => $accounts, 'me' => $myId]);
+    json_out(200, ['success' => true, 'accounts' => $accounts, 'me' => $myId, 'role' => $role]);
 } catch (Throwable $e) {
     json_out(500, ['success' => false, 'error' => 'Server error.']);
 }

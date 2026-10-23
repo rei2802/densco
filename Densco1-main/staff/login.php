@@ -2,10 +2,10 @@
 require_once '../config.php';
 session_start();
 
-// Log out: clear the staff session, then show the login page again
+// Log out: clear the staff session, then go back to the main login page
 if (isset($_GET['logout'])) {
     unset($_SESSION['staff_id'], $_SESSION['staff_name'], $_SESSION['staff_role']);
-    header('Location: login.php');
+    header('Location: ../login.php');
     exit;
 }
 
@@ -39,7 +39,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     exit;
 }
+
+// Everyone now logs in on the main login form
+header('Location: ../login.php');
+exit;
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
