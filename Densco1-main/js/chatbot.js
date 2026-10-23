@@ -3,6 +3,7 @@
    - Live product stock lookup
    - Gemini AI responses through api/chatbot.php
    - Escalation to staff when requested or AI is unavailable
+   - Visible indicator whenever the customer is talking to staff
 */
 
 (function () {
@@ -58,10 +59,10 @@
     if (history.length > 12) history.shift();
   }
 
-    function categoryList() {
+  function categoryList() {
     try { return (D.categories || []).join(", "); } catch (e) { return ""; }
   }
-  
+
   // Gives the AI your real business info, live stock levels and policies
   function buildContext() {
     try {
@@ -89,7 +90,7 @@
           ? "logged in. The customer can type 'talk to staff' to chat with the Densco team."
           : "guest, not logged in. Staff chat is only available after logging in, so ask the customer to log in first or to contact Densco on Viber or Messenger.") +
         "\n" +
-                "Website guide (how customers navigate the site):\n" +
+        "Website guide (how customers navigate the site):\n" +
         "- Home page: search bar, browse by category, and business information.\n" +
         "- Catalog page: shows all products. Customers can filter by category (" + categoryList() + ") or search by product name. For example, the Stretcher / Ambulance category lists stretchers.\n" +
         "- Product page: click any product name or image to see its price, description, live stock and Add to Cart.\n" +
@@ -122,7 +123,7 @@
       "You may track your order status, from Pending to Completed, under My Account."
     ],
     [
-            /business hours|opening hours|store hours|are you open|open (today|on|until|at)|what time|when do you (open|close)|closing|location|address|located|where are you/,
+      /business hours|opening hours|store hours|are you open|open (today|on|until|at)|what time|when do you (open|close)|closing|location|address|located|where are you/,
       "Our business hours are " +
         D.biz().hours.toLowerCase() +
         ". We are located at " +
@@ -258,7 +259,7 @@
       };
     }
 
-        // General product-knowledge questions ("what is a nebulizer?", "what is it used for?")
+    // General product-knowledge questions ("what is a nebulizer?", "what is it used for?")
     // go to Gemini, unless the customer is really asking about price or stock
     var asksInfo = /what is|what's|what are|what does|what do|ano (ang|ba)|ano po|explain|describe|meaning of|used for|use of|uses of|purpose|how does|how do|difference between|tell me about|benefits|features/.test(text);
     var asksBusinessFact = /price|cost|how much|magkano|stock|available|availability|inventory|how many/.test(text);
@@ -267,7 +268,7 @@
       return null;
     }
 
-        // Website navigation questions go to Gemini, which has the site guide
+    // Website navigation questions go to Gemini, which has the site guide
     if (/navigate|find|see it|where can|where do|where is|how do i|how can i|browse|which page|what page|website|link|go to|click|menu|section|categor/.test(text)) {
       return null;
     }
@@ -399,9 +400,14 @@
         '<div class="cb-head">' +
           '<div>' +
             '<b>Densco Assistant</b>' +
-            '<small>Answers instantly, or hands you to our team</small>' +
+            '<small id="cbSub">Answers instantly, or hands you to our team</small>' +
           '</div>' +
           '<button class="cb-x" id="cbX" aria-label="Close chat">&times;</button>' +
+        '</div>' +
+        '<div class="cb-staffbar" id="cbStaff" hidden>' +
+          '<span class="cb-dot"></span>' +
+          '<span>You are chatting with a Densco team member</span>' +
+          '<button type="button" id="cbBack">Back to bot</button>' +
         '</div>' +
         '<div class="cb-msgs" id="cbMsgs">' +
           '<div class="cb-m bot">' + GREETING + '</div>' +
@@ -414,7 +420,7 @@
           '<button>Back to bot</button>' +
         '</div>' +
         '<form class="cb-form" id="cbForm">' +
-  '<input id="cbIn" placeholder="Type a message" autocomplete="off">' +
+          '<input id="cbIn" placeholder="Type a message" autocomplete="off">' +
           '<button type="button" id="cbMic" class="cb-mic" aria-label="Hold to talk" title="Hold to talk">' +
             '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
               '<rect x="9" y="3" width="6" height="11" rx="3"/>' +
@@ -423,9 +429,8 @@
               '<path d="M9 21h6"/>' +
             '</svg>' +
           '</button>' +
-            '<button type="submit" class="btn btn-red btn-sm">Send</button>' +
-'</form>' +
-       
+          '<button type="submit" class="btn btn-red btn-sm">Send</button>' +
+        '</form>' +
       '</div>' +
       '<button class="cb-fab" id="cbFab" aria-label="Open chat">' +
         '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">' +
@@ -438,6 +443,35 @@
   var cb = document.getElementById("cb");
   var msgs = document.getElementById("cbMsgs");
   var input = document.getElementById("cbIn");
+
+  // ---- Staff-mode indicator -----------------------------------------
+  var staffBar = document.getElementById("cbStaff");
+  var sub = document.getElementById("cbSub");
+  var SUB_BOT = sub.textContent;
+
+  // Styles are injected here so no CSS file edit is needed
+  // (move them to your stylesheet if you prefer)
+  var st = document.createElement("style");
+  st.textContent =
+    ".cb-staffbar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#e8f7ee;color:#14633a;font-size:13px;border-bottom:1px solid #c6ebd5}" +
+    ".cb-staffbar[hidden]{display:none}" +
+    ".cb-staffbar span:nth-child(2){flex:1}" +
+    ".cb-staffbar button{border:1px solid #14633a;background:#fff;color:#14633a;border-radius:12px;padding:2px 10px;font-size:12px;cursor:pointer}" +
+    ".cb-dot{width:9px;height:9px;border-radius:50%;background:#22c55e;animation:cbPulse 1.5s infinite}" +
+    "@keyframes cbPulse{0%,100%{opacity:1}50%{opacity:.35}}" +
+    ".cb-m.staff{border-left:3px solid #22c55e}";
+  document.head.appendChild(st);
+
+  // Show or hide the "talking to staff" indicator based on the active inquiry
+  function updateStaffIndicator() {
+    var onStaff = !!active;
+    staffBar.hidden = !onStaff;
+    sub.textContent = onStaff ? "Live chat with our team" : SUB_BOT;
+  }
+
+  document.getElementById("cbBack").onclick = function () {
+    send("back to bot");
+  };
 
   // ---- Chat storage -------------------------------------------------
   // Logged-in customers: the chat is saved under their account and is still
@@ -533,6 +567,8 @@
     } else {
       add(GREETING, "bot", true);
     }
+
+    updateStaffIndicator();
   }
 
   loadChat();
@@ -543,25 +579,38 @@
 
     var all = read();
 
-    var inquiry = {
-      id: "INQ-" + Date.now(),
-      customer: who,
-      question: message,
-      status: "open",
-      messages: [
-        {
-          sender: "customer",
-          text: message,
-          time: new Date().toISOString()
-        }
-      ]
+    // Reuse this customer's existing conversation (newest first) so staff
+    // always see ONE thread per person instead of many separate ones
+    var inquiry = all.filter(function (item) {
+      return userKey(item.customer) === whoKey;
+    })[0];
+
+    var newMessage = {
+      sender: "customer",
+      text: message,
+      time: new Date().toISOString()
     };
 
-    all.unshift(inquiry);
+    if (inquiry) {
+      inquiry.messages.push(newMessage);
+      inquiry.question = message;   // list preview shows the latest message
+      inquiry.status = "open";      // flag it as needing a reply again
+    } else {
+      inquiry = {
+        id: "INQ-" + Date.now(),
+        customer: who,
+        question: message,
+        status: "open",
+        messages: [newMessage]
+      };
+      all.unshift(inquiry);
+    }
+
     D.put(KEY, all);
 
     active = inquiry.id;
-    seen = 1;
+    seen = inquiry.messages.length;
+    updateStaffIndicator();
     save();
   }
 
@@ -574,6 +623,7 @@
     // Let the customer leave staff mode and return to the assistant
     if (/^(back to bot|bot|assistant)$/i.test(message.trim())) {
       active = null;
+      updateStaffIndicator();
       add("Welcome back. This is the Densco Assistant. How may I help you?", "bot");
       return;
     }
@@ -590,12 +640,14 @@
             time: new Date().toISOString()
           });
 
+          inquiry.question = message;   // list preview shows the latest message
+          inquiry.status = "open";      // needs a staff reply again
           seen = inquiry.messages.length;
         }
       });
 
       D.put(KEY, all);
-      add("Your message has been sent. A Densco team member will reply here shortly. You may type \"back to bot\" to return to the assistant.", "bot");
+      save();
       return;
     }
 
@@ -686,7 +738,7 @@
   };
 
 
-    // ===== VOICE CODE =====
+  // ===== VOICE CODE =====
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   var mic = document.getElementById("cbMic");
 
