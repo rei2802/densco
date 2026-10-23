@@ -317,6 +317,8 @@ while ($row = $res->fetch_assoc()) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../css/style.css">
+
+  
 </head>
 <body data-page="inventory" data-roles="owner admin inventory">
   <div class="app">
@@ -342,7 +344,6 @@ while ($row = $res->fetch_assoc()) {
                 <th>Price</th>
                 <th>Stock</th>
                 <th>Status</th>
-                <th>Availability</th>
                 <th></th>
               </tr>
             </thead>
@@ -515,13 +516,17 @@ while ($row = $res->fetch_assoc()) {
           ? `<img src="${imgUrl(p.image)}" alt="" style="display:inline-block;width:40px;height:40px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle">`
           : "";
 
+        // Status column: dropdown (In Stock / Not Available). A small badge is kept next to it
+        // only when the quantity is actually low or out, so staff still see the warning.
+        const stockWarn = st === "low" ? ' <span class="badge low">Low Stock</span>'
+          : st === "out" ? ' <span class="badge out">Out of Stock</span>' : "";
         const availSel = `<select class="avail-select" data-avail-id="${p.id}">
           <option value="in_stock" ${p.avail !== "not_available" ? "selected" : ""}>In Stock</option>
           <option value="not_available" ${p.avail === "not_available" ? "selected" : ""}>Not Available</option>
         </select>`;
 
-        return `<tr><td>${thumb}<strong>${DHP.esc(p.name)}</strong>${p.hidden ? ' <span class="badge">Hidden</span>' : ""}</td><td>${p.cat}</td><td>${DHP.peso(p.price)}</td><td>${qtyCell}</td><td><span class="badge ${st}">${st === "in" ? "In Stock" : st === "low" ? "Low Stock" : "Out of Stock"}</span></td><td>${availSel}</td><td class="acts">${action}</td></tr>`;
-      }).join("") || '<tr><td colspan="7"><div class="empty">No products match your search.</div></td></tr>';
+        return `<tr><td>${thumb}<strong>${DHP.esc(p.name)}</strong>${p.hidden ? ' <span class="badge">Hidden</span>' : ""}</td><td>${p.cat}</td><td>${DHP.peso(p.price)}</td><td>${qtyCell}</td><td>${availSel}${stockWarn}</td><td class="acts">${action}</td></tr>`;
+      }).join("") || '<tr><td colspan="6"><div class="empty">No products match your search.</div></td></tr>';
     }
 
     $("q").addEventListener("input", (e) => {

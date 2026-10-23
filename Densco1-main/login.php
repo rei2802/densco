@@ -21,13 +21,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $row = $result->fetch_assoc();
     $stmt->close();
 
-    if ($row && password_verify($pw, $row['password'])) {
+        if ($row && password_verify($pw, $row['password'])) {
         $_SESSION['user_id']   = $row['user_id'];
         $_SESSION['user_name'] = $row['full_name'];
         echo json_encode(['success' => true, 'name' => $row['full_name']]);
-    } else {
-        echo json_encode(['success' => false, 'error' => 'Invalid email or password.']);
+        exit;
     }
+
+    // Not a customer? One login form for everyone: check the staff accounts too.
+    $stmt = $conn->prepare("SELECT staff_id, first_name, last_name, password, role FROM staff WHERE email = ? LIMIT 1");
+    $stmt->bind_param("s", $userInput);
+    $stmt->execute();
+    $staffRow = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if ($staffRow && password_verify($pw, $staffRow['password'])) {
+        $fullName = $staffRow['first_name'] . ' ' . $staffRow['last_name'];
+        $_SESSION['staff_id']   = $staffRow['staff_id'];
+        $_SESSION['staff_name'] = $fullName;
+        $_SESSION['staff_role'] = $staffRow['role'];
+        echo json_encode(['success' => true, 'staff' => true, 'name' => $fullName, 'role' => $staffRow['role']]);
+        exit;
+    }
+
+    echo json_encode(['success' => false, 'error' => 'Invalid email or password.']);
     exit;
 
     
@@ -70,7 +87,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <div class="auth-foot">
         <p>New to Densco? <a href="register.php">Create an account</a></p>
-        <p class="mt">Densco employee? <a href="staff/login.php">Staff log in</a></p>
       </div>
     </div>
 

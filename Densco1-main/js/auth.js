@@ -58,7 +58,7 @@
       D.esc(b.hours) +
       "</p><p>" +
       D.esc(b.contact) +
-      ' supported for inquiries</p></div><div><b>Account</b><p><a href="login.php">Log in</a></p><p><a href="register.php">Create an account</a></p><p><a href="staff/login.php">Staff portal</a></p></div></div><div class="ftr-bot"><span>\u00A9 2026 Densco Health Products. All rights reserved.</span></div></div>';
+      ' supported for inquiries</p></div><div><b>Account</b><p><a href="login.php">Log in</a></p><p><a href="register.php">Create an account</a></p></div></div><div class="ftr-bot"><span>\u00A9 2026 Densco Health Products. All rights reserved.</span></div></div>';
 
   D.updateBadge = function () {
     var x = document.getElementById("cartBadge");
@@ -104,7 +104,11 @@
           return r.json();
         })
         .then(function (data) {
-          if (data.success) {
+          if (data.success && data.staff) {
+            // Staff account: same form, but go to the staff dashboard
+            D.put("denscoStaffRole", data.role);
+            location.href = "staff/dashboard.html";
+          } else if (data.success) {
             D.login(data.name);
             go();
           } else {
