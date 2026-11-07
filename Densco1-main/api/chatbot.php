@@ -1,6 +1,6 @@
 <?php
 header('Content-Type: application/json');
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/config.example.php';
 
 if (!function_exists('fail')) {
     function fail($code, $msg) {

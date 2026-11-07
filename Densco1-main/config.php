@@ -28,7 +28,7 @@ try {
     } else {
     // XAMPP local database connection
     $host = 'localhost';
-    $port = 3306;
+    $port = 3307;
     $user = 'root';
     $pass = '';
     $name = 'densco_db';   // 

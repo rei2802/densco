@@ -1,6 +1,16 @@
 <?php
 require_once '../config.php';
 
+// Suppliers a product can be sourced from, and the default for every product.
+// The products.supplier column is added automatically the first time this page runs
+// (existing products get the default).
+$ALLOWED_SUPPLIERS = ['Densco', 'Omron', 'Topcare'];
+$DEFAULT_SUPPLIER  = 'Densco';
+$colCheck = $conn->query("SHOW COLUMNS FROM products LIKE 'supplier'");
+if ($colCheck->num_rows === 0) {
+    $conn->query("ALTER TABLE products ADD COLUMN supplier VARCHAR(150) NOT NULL DEFAULT 'Densco'");
+}
+
 // Uploads an image to Cloudinary (permanent storage - Render's disk is wiped on every deploy)
 // and returns its https URL, null if no file was uploaded, or false if the upload failed
 // or the file type isn't allowed. A .jfif file is a JPEG, so it is detected as image/jpeg.
@@ -206,11 +216,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Type string must have exactly as many characters as bound
-        // variables / placeholders below (9 now that availability_status
+        // variables / placeholders below (10 now that supplier and availability_status
         // was added — a mismatch here throws a fatal mysqli_sql_exception
         // and crashes every save with a 500).
-        $stmt = $conn->prepare("UPDATE products SET product_name = ?, category = ?, price = ?, stock_quantity = ?, description = ?, hidden = ?, image_path = ?, availability_status = ? WHERE product_id = ?");
-        $stmt->bind_param("ssdisissi", $name, $cat, $price, $stock, $desc, $hidden, $imagePath, $status, $id);
+        $supplier = trim($data['supplier'] ?? '');
+        if (!in_array($supplier, $ALLOWED_SUPPLIERS, true)) {
+            echo json_encode(['success' => false, 'error' => 'Please choose a supplier from the list.']);
+            exit;
+        }
+
+        $stmt = $conn->prepare("UPDATE products SET product_name = ?, category = ?, price = ?, stock_quantity = ?, description = ?, hidden = ?, image_path = ?, availability_status = ?, supplier = ? WHERE product_id = ?");
+        $stmt->bind_param("ssdisisssi", $name, $cat, $price, $stock, $desc, $hidden, $imagePath, $status, $supplier, $id);
         $stmt->execute();
         echo json_encode(['success' => true]);
         $stmt->close();
@@ -245,8 +261,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $stmt = $conn->prepare("INSERT INTO products (product_name, category, price, stock_quantity, description, image_path, availability_status) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("ssdisss", $name, $cat, $price, $stock, $desc, $imagePath, $status);
+        $supplier = trim($data['supplier'] ?? '') ?: $DEFAULT_SUPPLIER;
+        if (!in_array($supplier, $ALLOWED_SUPPLIERS, true)) {
+            echo json_encode(['success' => false, 'error' => 'Please choose a supplier from the list.']);
+            exit;
+        }
+
+        $stmt = $conn->prepare("INSERT INTO products (product_name, category, price, stock_quantity, description, image_path, availability_status, supplier) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("ssdissss", $name, $cat, $price, $stock, $desc, $imagePath, $status, $supplier);
         $stmt->execute();
         echo json_encode(['success' => true, 'id' => $stmt->insert_id]);
         $stmt->close();
@@ -293,7 +315,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Normal page load: fetch current products for initial render
 // ============================================
 $products = [];
-$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, hidden, image_path, availability_status FROM products");
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, hidden, image_path, availability_status, supplier FROM products");
 while ($row = $res->fetch_assoc()) {
     $products[] = [
         "id"     => (int)$row["product_id"],
@@ -305,6 +327,7 @@ while ($row = $res->fetch_assoc()) {
         "hidden" => (bool)$row["hidden"],
         "image"  => $row["image_path"] ?: null,
         "avail"  => $row["availability_status"] ?: "in_stock",
+        "supplier" => $row["supplier"] ?: $DEFAULT_SUPPLIER,
     ];
 }
 ?>
@@ -374,6 +397,10 @@ while ($row = $res->fetch_assoc()) {
             </div>
           </div>
           <div class="field">
+            <label>Supplier</label>
+            <select id="nSupplier"></select>
+          </div>
+          <div class="field">
             <label>Description</label>
             <textarea id="nDesc" rows="2" placeholder="Shown on the product page"></textarea>
           </div>
@@ -409,6 +436,10 @@ while ($row = $res->fetch_assoc()) {
                 <label>Stock quantity</label>
                 <input id="eStock" type="number" min="0">
               </div>
+            </div>
+            <div class="field">
+              <label>Supplier</label>
+              <select id="eSupplier"></select>
             </div>
             <div class="field">
               <label>Description</label>
@@ -485,6 +516,13 @@ while ($row = $res->fetch_assoc()) {
     ["nCat", "eCat"].forEach((id) => {
       $(id).innerHTML = DHP.categories.map((c) => `<option>${c}</option>`).join("");
     });
+
+    // Same list as $ALLOWED_SUPPLIERS above; Densco is the default for every product
+    const SUPPLIERS = <?php echo json_encode($ALLOWED_SUPPLIERS); ?>;
+    ["nSupplier", "eSupplier"].forEach((id) => {
+      $(id).innerHTML = SUPPLIERS.map((c) => `<option>${c}</option>`).join("");
+    });
+    $("nSupplier").value = "<?php echo $DEFAULT_SUPPLIER; ?>";
 
     async function api(payload) {
       const r = await fetch("inventory.php", {
@@ -599,6 +637,7 @@ while ($row = $res->fetch_assoc()) {
         $("ePrice").value = p.price;
         $("eStock").value = p.stock;
         $("eDesc").value = p.desc;
+        $("eSupplier").value = p.supplier || "Densco";
         $("eHidden").checked = !!p.hidden;
         $("eImage").value = "";
         $("eRemoveImg").checked = false;
@@ -624,6 +663,7 @@ while ($row = $res->fetch_assoc()) {
       fd.append("name", $("eName").value.trim());
       fd.append("cat", $("eCat").value);
       fd.append("price", +$("ePrice").value || 0);
+      fd.append("supplier", $("eSupplier").value);
       fd.append("desc", $("eDesc").value);
       fd.append("hidden", $("eHidden").checked ? "1" : "");
       if ($("eImage").files[0]) fd.append("image", $("eImage").files[0]);
@@ -663,6 +703,7 @@ while ($row = $res->fetch_assoc()) {
       fd.append("cat", $("nCat").value);
       fd.append("price", +$("nPrice").value || 0);
       fd.append("stock", +$("nStock").value || 0);
+      fd.append("supplier", $("nSupplier").value);
       fd.append("desc", $("nDesc").value.trim());
       if ($("nImage").files[0]) fd.append("image", $("nImage").files[0]);
 

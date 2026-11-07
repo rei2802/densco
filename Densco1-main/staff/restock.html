@@ -35,6 +35,10 @@
               <button class="modal-x" data-close>&times;</button>
             </div>
             <div class="field">
+              <label for="rsProduct">Product name</label>
+              <select id="rsProduct"></select>
+            </div>
+            <div class="field">
               <label for="rsSupplier">Supplier name</label>
               <select id="rsSupplier">
                 <option value="">Select a supplier</option>
@@ -42,10 +46,7 @@
                 <option value="Omron">Omron</option>
                 <option value="Topcare">Topcare</option>
               </select>
-            </div>
-            <div class="field">
-              <label for="rsProduct">Product name</label>
-              <select id="rsProduct"></select>
+              <p class="muted sm" style="margin-top:6px">Filled in from the product's supplier in Inventory. You can change it for this restock.</p>
             </div>
             <div class="row2">
               <div class="field">
@@ -147,9 +148,25 @@
 
     // ---- Restock form: any of Owner, Admin, Inventory Staff can submit.
     // Adds to the product's stock in the database immediately (shop reads the same value) — no approval step.
+    let PRODUCTS = [];
+
+    // Pre-fill the supplier from the selected product's last restock; the user can still change it.
+    $("rsProduct").addEventListener("change", () => {
+      const p = PRODUCTS.find((x) => String(x.id) === $("rsProduct").value);
+      const sel = $("rsSupplier");
+      if (!p) return;
+      // The product's own supplier (Densco by default)
+      const supplier = p.supplier || "Densco";
+      if (![...sel.options].some((o) => o.value === supplier)) {
+        sel.add(new Option(supplier, supplier));
+      }
+      sel.value = supplier;
+    });
+
     $("openRestock").onclick = async () => {
       $("rsErr").textContent = "";
       $("rsSupplier").value = "";
+      [...$("rsSupplier").options].forEach((o, i) => { if (i > 3) o.remove(); }); // drop earlier custom suppliers
       $("rsQty").value = "";
       $("rsNotes").value = "";
       $("rsDate").value = new Date().toLocaleDateString("en-CA");
@@ -161,6 +178,7 @@
         if (r.status === 401) { location.href = "login.php"; return; }
         const d = await r.json();
         if (!d.success) throw new Error(d.error);
+        PRODUCTS = d.products;
         $("rsProduct").innerHTML =
           '<option value="">Select a product</option>' +
           d.products
@@ -181,7 +199,7 @@
       const qty = Math.floor(+$("rsQty").value);
       const date = $("rsDate").value;
 
-      if (!supplier) { err.textContent = "Enter the supplier name."; return; }
+      if (!supplier) { err.textContent = "Select the supplier."; return; }
       if (!pid) { err.textContent = "Select a product."; return; }
       if (!qty || qty < 1) { err.textContent = "Enter a quantity of at least 1."; return; }
       if (!date) { err.textContent = "Select the date."; return; }

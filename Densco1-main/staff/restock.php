@@ -125,13 +125,20 @@ try {
     // Product list for the form: the same products currently listed in the shop (hidden = 0)
     if (isset($_GET['products'])) {
         $products = [];
-        $res = $conn->query("SELECT product_id, product_name, category, stock_quantity FROM products WHERE hidden = 0 ORDER BY product_name, product_id");
+        // Each product carries its own supplier (set in Inventory; Densco by default).
+        // The column is added by inventory.php; create it here too in case Restock is opened first.
+        if ($conn->query("SHOW COLUMNS FROM products LIKE 'supplier'")->num_rows === 0) {
+            $conn->query("ALTER TABLE products ADD COLUMN supplier VARCHAR(150) NOT NULL DEFAULT 'Densco'");
+        }
+        $res = $conn->query("SELECT product_id, product_name, category, stock_quantity, supplier
+                             FROM products WHERE hidden = 0 ORDER BY product_name, product_id");
         while ($r = $res->fetch_assoc()) {
             $products[] = [
-                'id'    => (int)$r['product_id'],
-                'name'  => $r['product_name'],
-                'cat'   => $r['category'],
-                'stock' => (int)$r['stock_quantity'],
+                'id'       => (int)$r['product_id'],
+                'name'     => $r['product_name'],
+                'cat'      => $r['category'],
+                'stock'    => (int)$r['stock_quantity'],
+                'supplier' => $r['supplier'] ?: 'Densco',
             ];
         }
         json_out(200, ['success' => true, 'products' => $products]);

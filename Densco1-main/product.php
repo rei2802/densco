@@ -1,8 +1,13 @@
 <?php
 require_once 'config.php';
 
+// The supplier column is normally added by the staff Inventory page; make sure it exists here too
+if ($conn->query("SHOW COLUMNS FROM products LIKE 'supplier'")->num_rows === 0) {
+    $conn->query("ALTER TABLE products ADD COLUMN supplier VARCHAR(150) NOT NULL DEFAULT 'Densco'");
+}
+
 $products = [];
-$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path, availability_status FROM products WHERE hidden = 0");
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path, availability_status, supplier FROM products WHERE hidden = 0");
 while ($row = $res->fetch_assoc()) {
     $products[] = [
         "id"    => (int)$row["product_id"],
@@ -13,6 +18,7 @@ while ($row = $res->fetch_assoc()) {
         "desc"  => $row["description"],
         "image" => $row["image_path"] ?: null,
         "avail" => $row["availability_status"] ?: "in_stock",
+        "supplier" => $row["supplier"] ?: "Densco",
     ];
 }
 ?>
@@ -70,6 +76,7 @@ while ($row = $res->fetch_assoc()) {
           `<span class="price">${DHP.peso(p.price)}</span>` +
           `<div class="stock ${DHP.shopState(p)}">${DHP.shopStateLabel(p)}</div>` +
           `<p class="pd-desc">${DHP.esc(p.desc)}</p>` +
+          `<div class="flex" style="margin-bottom:14px"><b>Supplier:</b><span>${DHP.esc(p.supplier || "Densco")}</span></div>` +
           `<div class="flex"><b>Quantity</b><div class="qty"><button id="m">−</button><input id="q" value="1" readonly><button id="pl">+</button></div></div>` +
           `<div class="flex mt">` +
             `<button class="btn btn-red btn-lg" id="now" ${DHP.canOrder(p) ? "" : "disabled"}>Order Now</button>` +

@@ -18,10 +18,10 @@
       <main>
         <div class="page-head">
           <h1>Manage accounts</h1>
-          <p class="muted">Create staff accounts and manage all currently active accounts across every role.</p>
+          <p class="muted" id="pageSub">Manage all currently active staff accounts.</p>
         </div>
 
-        <div class="card">
+        <div class="card" data-roles="owner">
           <div class="flex between">
             <div>
               <h3 style="margin-bottom:2px">Create staff account</h3>
@@ -31,12 +31,18 @@
           </div>
         </div>
 
+        <div class="card hide" id="reqCard">
+          <h3 id="reqTitle">Pending changes (<span id="reqCount">0</span>)</h3>
+          <p class="muted sm" id="reqNote"></p>
+          <div class="list" id="reqList"></div>
+        </div>
+
         <div class="card">
           <h3>Active accounts (<span id="count">0</span>)</h3>
           <div class="list" id="accts"><div class="empty">Loading accounts...</div></div>
         </div>
 
-        <div class="modal" id="createModal">
+        <div class="modal" id="createModal" data-roles="owner">
           <div class="modal-box">
             <div class="modal-head">
               <h3>Create account</h3>
@@ -82,7 +88,36 @@
             <p class="err mt" id="acctErr"></p>
             <div class="flex mt" style="justify-content:flex-end">
               <button class="btn btn-line" data-close>Close</button>
-              <button class="btn btn-red" id="acctDelete">Delete account</button>
+              <button class="btn btn-line" id="acctEdit">Edit details</button>
+              <button class="btn btn-red" id="acctDelete" data-roles="owner">Delete account</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal" id="editModal">
+          <div class="modal-box">
+            <div class="modal-head">
+              <h3 id="eTitle">Edit details</h3>
+              <button class="modal-x" data-close>&times;</button>
+            </div>
+            <p class="muted sm" id="eNote" style="margin-bottom:10px"></p>
+            <div class="field">
+              <label for="eName">Full name</label>
+              <input id="eName" maxlength="100" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="eEmail">Email</label>
+              <input id="eEmail" type="email" maxlength="100" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="ePass">New password (optional)</label>
+              <input id="ePass" type="password" autocomplete="new-password">
+              <p class="muted sm" style="margin-top:6px">Leave blank to keep the current password. At least 8 characters.</p>
+            </div>
+            <p class="err" id="eErr"></p>
+            <div class="flex" style="justify-content:flex-end">
+              <button class="btn btn-line" data-close>Cancel</button>
+              <button class="btn btn-red" id="eSubmit">Save</button>
             </div>
           </div>
         </div>
@@ -99,6 +134,8 @@
     const LABEL = { owner: "Business Owner", admin: "Administrator", inventory: "Inventory Staff" };
     let ACCOUNTS = [];
     let ME = 0;
+    let MYROLE = null;
+    let REQUESTS = [];
     let selected = null;
 
     function renderRow(a) {
@@ -106,6 +143,7 @@
         `<div class="row">` +
           `<span><b>${DHP.esc(a.name)}</b><span class="muted">${DHP.esc(LABEL[a.role] || a.role)}, ${DHP.esc(a.email)}</span></span>` +
           `<span class="flex">` +
+            (REQUESTS.some((q) => q.target === a.id) ? `<span class="badge pending">Change pending</span>` : "") +
             `<span class="badge in">Active</span>` +
             `<button class="btn btn-line btn-sm" data-manage="${a.id}">Manage</button>` +
           `</span>` +
@@ -113,7 +151,35 @@
       );
     }
 
+    function renderRequests() {
+      const isOwner = MYROLE === "owner";
+      $("reqCard").classList.toggle("hide", REQUESTS.length === 0);
+      $("reqCount").textContent = REQUESTS.length;
+      $("reqTitle").firstChild.textContent = isOwner ? "Pending changes (" : "Awaiting Owner approval (";
+      $("reqNote").textContent = isOwner
+        ? "Administrators requested these changes. Nothing is applied until you approve."
+        : "These changes take effect only after the Owner approves them.";
+      $("reqList").innerHTML = REQUESTS.map((q) => {
+        const bits = [];
+        if (q.newName) bits.push("Name: " + q.newName);
+        if (q.newEmail) bits.push("Email: " + q.oldEmail + " \u2192 " + q.newEmail);
+        if (q.password) bits.push("Password reset");
+        return (
+          `<div class="row">` +
+            `<span><b>${DHP.esc(q.targetName)}</b>` +
+            `<span class="muted">${DHP.esc(bits.join(" · "))}</span>` +
+            `<span class="muted sm">Requested by ${DHP.esc(q.by)} · ${DHP.esc(q.created)}</span></span>` +
+            (isOwner
+              ? `<span class="flex"><button class="btn btn-line btn-sm" data-reject="${q.id}">Reject</button>` +
+                `<button class="btn btn-red btn-sm" data-approve="${q.id}">Approve</button></span>`
+              : `<span class="badge pending">Pending</span>`) +
+          `</div>`
+        );
+      }).join("");
+    }
+
     function render() {
+      renderRequests();
       $("count").textContent = ACCOUNTS.length;
       $("accts").innerHTML = ACCOUNTS.length
         ? ACCOUNTS.map(renderRow).join("")
@@ -133,7 +199,12 @@
           if (!d) return;
           if (!d.success) throw new Error(d.error);
           ACCOUNTS = d.accounts;
+          REQUESTS = d.requests || [];
           ME = d.me;
+          MYROLE = d.role;
+          $("pageSub").textContent = MYROLE === "owner"
+            ? "Create staff accounts and manage all currently active accounts across every role."
+            : "View active staff accounts and request detail changes. The Owner must approve every change.";
           render();
         })
         .catch(() => {
@@ -165,12 +236,24 @@
       $("acctErr").textContent = "";
       const isSelf = a.id === ME;
       const isOwner = a.role === "owner";
+      const pending = REQUESTS.some((q) => q.target === a.id);
       $("acctDelete").disabled = isSelf || isOwner;
-      $("acctNote").textContent = isSelf
-        ? "You can't delete the account you are signed in with."
-        : isOwner
-          ? "The owner account can't be deleted."
-          : "";
+
+      // Owner edits directly; Admin may only request changes to Inventory Staff
+      const canEdit = MYROLE === "owner" || (MYROLE === "admin" && a.role === "inventory" && !pending);
+      $("acctEdit").classList.toggle("hide", !(MYROLE === "owner" || (MYROLE === "admin" && a.role === "inventory")));
+      $("acctEdit").disabled = !canEdit;
+      $("acctEdit").textContent = MYROLE === "owner" ? "Edit details" : "Request change";
+
+      $("acctNote").textContent = pending && MYROLE === "admin"
+        ? "A change for this account is already waiting for the Owner's approval."
+        : MYROLE === "admin" && a.role !== "inventory"
+          ? "Only the Owner can change Administrator and Owner accounts."
+          : isSelf
+            ? "You can't delete the account you are signed in with."
+            : isOwner
+              ? "The owner account can't be deleted."
+              : "";
 
       $("acctModal").classList.add("open");
     });
@@ -205,6 +288,80 @@
       }
     };
 
+
+    // ---- Edit details (Owner: saves now. Admin: sends a request for the Owner to approve)
+    $("acctEdit").onclick = () => {
+      if (!selected) return;
+      $("eName").value = selected.name;
+      $("eEmail").value = selected.email;
+      $("ePass").value = "";
+      $("eErr").textContent = "";
+      const owner = MYROLE === "owner";
+      $("eTitle").textContent = owner ? "Edit details" : "Request a change";
+      $("eNote").textContent = owner ? "" : "This will be sent to the Owner. Nothing changes until it is approved.";
+      $("eSubmit").textContent = owner ? "Save changes" : "Send for approval";
+      $("acctModal").classList.remove("open");
+      $("editModal").classList.add("open");
+    };
+
+    $("eSubmit").onclick = async () => {
+      const err = $("eErr");
+      err.textContent = "";
+      const name = $("eName").value.trim();
+      const email = $("eEmail").value.trim();
+      const password = $("ePass").value;
+      if (!name) { err.textContent = "Enter the full name."; return; }
+      if (!email) { err.textContent = "Enter the email."; return; }
+      if (password && password.length < 8) { err.textContent = "Password must be at least 8 characters."; return; }
+
+      $("eSubmit").disabled = true;
+      try {
+        const r = await fetch("accounts.php", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: MYROLE === "owner" ? "update" : "request_update",
+            id: selected.id, name: name, email: email, password: password
+          })
+        });
+        if (r.status === 401) { location.href = "login.php"; return; }
+        const d = await r.json();
+        if (!d.success) { err.textContent = d.error || "Could not save the changes."; return; }
+        $("editModal").classList.remove("open");
+        DHP.toast(MYROLE === "owner" ? "Account updated" : "Sent to the Owner for approval");
+        load();
+      } catch (e) {
+        err.textContent = "Something went wrong. Please try again.";
+      } finally {
+        $("eSubmit").disabled = false;
+      }
+    };
+
+    // ---- Owner: approve / reject pending requests
+    $("reqList").addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-approve],[data-reject]");
+      if (!b) return;
+      const approve = b.hasAttribute("data-approve");
+      const id = Number(approve ? b.dataset.approve : b.dataset.reject);
+      if (!approve && !confirm("Reject this change request?")) return;
+      b.disabled = true;
+      try {
+        const r = await fetch("accounts.php", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: approve ? "approve" : "reject", request_id: id })
+        });
+        if (r.status === 401) { location.href = "login.php"; return; }
+        const d = await r.json();
+        if (!d.success) DHP.toast(d.error || "Could not process the request.");
+        else DHP.toast(approve ? "Change approved and applied" : "Request rejected");
+      } catch (x) {
+        DHP.toast("Something went wrong. Please try again.");
+      }
+      load();
+    });
 
     // ---- Create a new staff account
     $("openCreate").onclick = () => {
