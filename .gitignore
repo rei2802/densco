@@ -1,3 +1,5 @@
 Densco1-main/api/config.php
 
-
+config/cloudinary.php
+vendor/
+.env

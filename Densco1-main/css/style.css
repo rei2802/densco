@@ -1088,3 +1088,8 @@ label.opt span{font-size:12px;color:var(--mute)}
 
 .bestsellers{margin-bottom:40px}
 .bestsellers .pgrid{margin-bottom:4px}
+
+.badge.cancelled{
+    background:#fee2e2;
+    color:#dc2626;
+}

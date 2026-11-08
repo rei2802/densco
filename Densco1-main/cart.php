@@ -105,6 +105,32 @@ while ($row = $res->fetch_assoc()) {
             <input type="file" id="proof" accept="image/*,.pdf">
             <p class="muted sm" style="margin-top:6px">Upload a screenshot or photo of your receipt or deposit slip. Staff verify it before confirming your order.</p>
           </div>
+          <div class="card mt hide" id="paymentDetails">
+            <h3>Payment Instructions</h3>
+
+            <div id="gcashDetails">
+              <p><strong>GCash / QR PH</strong></p>
+              <p>Account Name: <strong>MITZ S.</strong></p>
+              <p>
+                Mobile Number:
+                <input type="text" value="09512517273" readonly>
+              </p>
+            </div>
+
+            <div id="bankDetails" class="hide">
+              <p><strong>BDO Bank Transfer</strong></p>
+              <p>Account Name: <strong>DENSCO INC</strong></p>
+              <p>
+                Account Number:
+                <input type="text" value="000708024363" readonly>
+              </p>
+            </div>
+
+            <p class="muted sm mt">
+              After sending your payment, upload your proof of payment before placing the order.
+            </p>
+          </div>
+
         </div>
       </div>
 
@@ -172,8 +198,39 @@ while ($row = $res->fetch_assoc()) {
       $("count").textContent = L.reduce((n, l) => n + l.qty, 0);
       $("feeTxt").textContent = "Metro Manila, 1 to 2 days, " + DHP.peso(FEE);
       $("addrBox").classList.toggle("hide", !del);
-      $("proofBox").classList.toggle("hide", val("pay") === "Cash");
 
+      const paymentMethod = val("pay");
+
+      $("proofBox").classList.toggle("hide", paymentMethod === "Cash");
+
+      $("paymentDetails").classList.toggle(
+        "hide",
+        paymentMethod === "Cash"
+      );
+
+      $("gcashDetails").classList.toggle(
+        "hide",
+        paymentMethod !== "GCash / QR PH"
+      );
+
+      $("bankDetails").classList.toggle(
+        "hide",
+        paymentMethod !== "Bank Transfer"
+      );
+      $("paymentDetails").classList.toggle(
+        "hide",
+        paymentMethod === "Cash"
+      );
+
+      $("gcashDetails").classList.toggle(
+        "hide",
+        paymentMethod !== "GCash / QR PH"
+      );
+
+      $("bankDetails").classList.toggle(
+        "hide",
+        paymentMethod !== "Bank Transfer"
+      );
       $("items").innerHTML = L.map(renderLine).join("");
 
       $("sum").innerHTML =

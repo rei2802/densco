@@ -53,6 +53,14 @@
     }
 
     function renderOrder(o) {
+      if (o.status === "cancelled") {
+        return `
+          <div class="card order">
+            <h3>${DHP.esc(o.id)}</h3>
+            <span class="badge cancelled">Cancelled</span>
+          </div>
+        `;
+      }
       const steps = trackSteps(o);
       const cur = ["pending", "confirmed", "shipped", "completed"].indexOf(o.status);
 
@@ -70,7 +78,16 @@
           `</div>` +
           `<p class="mt">${DHP.esc(o.summary)}</p>` +
           `<div class="track">${renderTrack(steps, cur, o.status)}</div>` +
-        `</div>`
+
+          (o.status === "pending"
+            ? `<div class="mt">
+                <button class="btn btn-red cancel-order" data-id="${o.oid}">
+                  Cancel Order
+                </button>
+              </div>`
+            : "") +
+
+          `</div>`
       );
     }
 
@@ -93,6 +110,32 @@
         box.innerHTML = d.orders.length
           ? d.orders.map(renderOrder).join("")
           : '<div class="card empty">You haven\'t placed an order yet. <a href="catalog.php">Browse the shop</a></div>';
+
+          document.querySelectorAll(".cancel-order").forEach(btn => {
+            btn.addEventListener("click", () => {
+              const orderId = btn.dataset.id;
+              console.log("Order ID being sent:", orderId);
+
+              if (!confirm("Cancel this order?")) return;
+
+              fetch("cancel_order.php", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: `order_id=${encodeURIComponent(orderId)}`
+              })
+              .then(r => r.json())
+              .then(data => {
+                if (data.success) {
+                  alert("Order cancelled.");
+                  location.reload();
+                } else {
+                  alert(data.error);
+                }
+              });
+            });
+          });
       })
       .catch(() => {
         box.innerHTML = '<div class="card empty">Could not load your orders. Please refresh the page.</div>';

@@ -20,9 +20,8 @@
 
   var NAV = [
     ["dashboard", "Dashboard", "owner admin inventory"],
-    ["orders", "Orders", "owner admin"],
+    ["orders", "Orders", "owner admin inventory"],
     ["inventory", "Inventory", "owner admin inventory"],
-    ["restock", "Restock", "owner admin inventory"],
     ["inquiries", "Inquiries", "admin"],
     ["sales-records", "Sales & Records", "owner admin"],
     ["staff", "Manage Accounts", "owner admin"],

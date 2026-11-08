@@ -1,6 +1,8 @@
 <?php
 require_once '../config.php';
+require_once __DIR__ . '/../config/cloudinary.php';
 
+use Cloudinary\Api\Upload\UploadApi;
 // Suppliers a product can be sourced from, and the default for every product.
 // The products.supplier column is added automatically the first time this page runs
 // (existing products get the default).
@@ -14,55 +16,35 @@ if ($colCheck->num_rows === 0) {
 // Uploads an image to Cloudinary (permanent storage - Render's disk is wiped on every deploy)
 // and returns its https URL, null if no file was uploaded, or false if the upload failed
 // or the file type isn't allowed. A .jfif file is a JPEG, so it is detected as image/jpeg.
-function handleProductImageUpload($fileKey) {
-    if (empty($_FILES[$fileKey]) || $_FILES[$fileKey]['error'] === UPLOAD_ERR_NO_FILE) {
+function handleProductImageUpload($fileKey)
+{
+    if (
+        empty($_FILES[$fileKey]) ||
+        $_FILES[$fileKey]['error'] === UPLOAD_ERR_NO_FILE
+    ) {
         return null;
     }
+
     if ($_FILES[$fileKey]['error'] !== UPLOAD_ERR_OK) {
         return false;
     }
 
-    $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
-    $tmp  = $_FILES[$fileKey]['tmp_name'];
-    $mime = mime_content_type($tmp);
-    if (!isset($allowed[$mime])) {
+    try {
+
+        $result = (new UploadApi())->upload(
+            $_FILES[$fileKey]['tmp_name'],
+            [
+                'folder' => 'densco/products'
+            ]
+        );
+
+        return $result['secure_url'];
+
+    } catch (Exception $e) {
+
+        error_log($e->getMessage());
         return false;
     }
-
-    $cloud  = getenv('CLOUDINARY_CLOUD_NAME');
-    $key    = getenv('CLOUDINARY_API_KEY');
-    $secret = getenv('CLOUDINARY_API_SECRET');
-    if (!$cloud || !$key || !$secret) {
-        return false;
-    }
-
-    $timestamp = time();
-    $folder    = 'densco/products';
-    // Cloudinary signature: sha1 of the sorted params + API secret
-    $signature = sha1("folder=$folder&timestamp=$timestamp" . $secret);
-
-    $ch = curl_init("https://api.cloudinary.com/v1_1/$cloud/image/upload");
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 60,
-        CURLOPT_POSTFIELDS     => [
-            'file'      => new CURLFile($tmp, $mime, 'upload.' . $allowed[$mime]),
-            'api_key'   => $key,
-            'timestamp' => $timestamp,
-            'folder'    => $folder,
-            'signature' => $signature,
-        ],
-    ]);
-    $resp = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($resp === false || $code !== 200) {
-        return false;
-    }
-    $data = json_decode($resp, true);
-    return $data['secure_url'] ?? false;
 }
 
 // ============================================
@@ -195,8 +177,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $curRow = $cur->get_result()->fetch_assoc();
         $cur->close();
 
-        $stock = array_key_exists('stock', $data) ? intval($data['stock']) : ($curRow ? (int)$curRow['stock_quantity'] : 0);
+        $currentStock = $curRow ? (int)$curRow['stock_quantity'] : 0;
+        $addStock = intval($data['add_stock'] ?? 0);
 
+        $stock = $currentStock + $addStock;
         $status = trim($data['status'] ?? '');
         if (!in_array($status, $ALLOWED_STATUSES, true)) {
             $status = $curRow ? $curRow['availability_status'] : 'in_stock';
@@ -432,9 +416,14 @@ while ($row = $res->fetch_assoc()) {
                 <label>Price (₱)</label>
                 <input id="ePrice" type="number" min="0">
               </div>
-              <div class="field hide">
-                <label>Stock quantity</label>
-                <input id="eStock" type="number" min="0">
+              <div class="field">
+                <label>Current Stock</label>
+                <input id="eStock" type="number" readonly>
+              </div>
+
+              <div class="field">
+                <label>Add Stock</label>
+                <input id="eAddStock" type="number" min="0" value="0">
               </div>
             </div>
             <div class="field">
@@ -464,35 +453,7 @@ while ($row = $res->fetch_assoc()) {
           </div>
         </div>
 
-        <div class="modal" id="restockModal">
-          <div class="modal-box">
-            <div class="modal-head">
-              <h3>Request restock</h3>
-              <button class="modal-x" data-close>&times;</button>
-            </div>
-            <div class="field">
-              <label>Product</label>
-              <input id="rProduct" readonly>
-            </div>
-            <div class="field">
-              <label>Current stock</label>
-              <input id="rStock" readonly>
-            </div>
-            <div class="field">
-              <label>Requested quantity</label>
-              <input id="rQty" type="number" min="1" placeholder="e.g. 50">
-            </div>
-            <div class="field">
-              <label>Reason / notes</label>
-              <textarea id="rReason" rows="3" placeholder="Why this product needs restocking"></textarea>
-            </div>
-            <p class="err" id="rErr"></p>
-            <div class="flex mt" style="justify-content:flex-end">
-              <button class="btn btn-line" data-close>Cancel</button>
-              <button class="btn btn-red" id="rSubmit">Submit request</button>
-            </div>
-          </div>
-        </div>
+        
 
       </main>
     </div>
@@ -509,7 +470,6 @@ while ($row = $res->fetch_assoc()) {
     const LOW = DHP.settings().lowStock;
     let term = "";
     let editing = null;
-    let reqProductId = null;
     // Images are now full Cloudinary URLs; older ones were local paths
     const imgUrl = (path) => (/^https?:\/\//.test(path) ? path : "../" + path);
 
@@ -544,12 +504,9 @@ while ($row = $res->fetch_assoc()) {
       $("rows").innerHTML = P.map((p) => {
         const st = DHP.state(p);
         const qtyCell = `${p.stock} units`;
-        const reqBtn = `<button class="btn btn-line btn-sm" data-req="${p.id}">Request restock</button>`;
         const editBtn = `<button class="link" data-edit="${p.id}">Edit</button>`;
         // Inventory Staff can always edit, even when the product is low or out of stock
-        const action = (st !== "in")
-          ? (DHP.role === "inventory" ? reqBtn + ` <span style="margin-left:10px">${editBtn}</span>` : reqBtn)
-          : editBtn;
+        const action = editBtn;
         const thumb = p.image
           ? `<img src="${imgUrl(p.image)}" alt="" style="display:inline-block;width:40px;height:40px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle">`
           : "";
@@ -558,12 +515,13 @@ while ($row = $res->fetch_assoc()) {
         // only when the quantity is actually low or out, so staff still see the warning.
         const stockWarn = st === "low" ? ' <span class="badge low">Low Stock</span>'
           : st === "out" ? ' <span class="badge out">Out of Stock</span>' : "";
-        const availSel = `<select class="avail-select" data-avail-id="${p.id}">
-          <option value="in_stock" ${p.avail !== "not_available" ? "selected" : ""}>In Stock</option>
-          <option value="not_available" ${p.avail === "not_available" ? "selected" : ""}>Not Available</option>
-        </select>`;
-
-        return `<tr><td>${thumb}<strong>${DHP.esc(p.name)}</strong>${p.hidden ? ' <span class="badge">Hidden</span>' : ""}</td><td>${p.cat}</td><td>${DHP.peso(p.price)}</td><td>${qtyCell}</td><td>${availSel}${stockWarn}</td><td class="acts">${action}</td></tr>`;
+        const statusBadge =
+            st === "out"
+              ? '<span class="badge out">Out of Stock</span>'
+              : st === "low"
+              ? '<span class="badge low">Low Stock</span>'
+              : '<span class="badge in">In Stock</span>';
+        return `<tr><td>${thumb}<strong>${DHP.esc(p.name)}</strong>${p.hidden ? ' <span class="badge">Hidden</span>' : ""}</td><td>${p.cat}</td><td>${DHP.peso(p.price)}</td><td>${qtyCell}</td><td>${statusBadge}</td><td class="acts">${action}</td></tr>`;
       }).join("") || '<tr><td colspan="6"><div class="empty">No products match your search.</div></td></tr>';
     }
 
@@ -574,23 +532,7 @@ while ($row = $res->fetch_assoc()) {
 
     // Stock status control — settable here by Owner, Admin and Inventory
     // Staff (this whole page is already restricted to those three roles).
-    $("rows").addEventListener("change", async (e) => {
-      const sel = e.target.closest("[data-avail-id]");
-      if (!sel) return;
-
-      const id = +sel.dataset.availId;
-      const status = sel.value;
-
-      const res = await api({ action: "set_status", id: id, status: status });
-      if (!res.success) {
-        DHP.toast(res.error || "Could not update status");
-        return;
-      }
-
-      const p = DHP.products().find((x) => x.id === id);
-      if (p) p.avail = status;
-      DHP.toast(status === "not_available" ? "Marked Not Available" : "Marked In Stock");
-    });
+    
 
     $("rows").addEventListener("click", async (e) => {
       const adj = e.target.closest("[data-adj]");
@@ -606,26 +548,7 @@ while ($row = $res->fetch_assoc()) {
         return;
       }
 
-      const req = e.target.closest("[data-req]");
-      if (req) {
-        const id = +req.dataset.req;
-        const p = DHP.products().find((x) => x.id === id);
-        const R = DHP.restockRequests();
-
-        if (R.some((r) => r.productId === id && (r.status === "pending" || r.status === "admin_approved"))) {
-          DHP.toast("A restock request for this product is already in progress");
-          return;
-        }
-
-        reqProductId = id;
-        $("rProduct").value = p.name;
-        $("rStock").value = p.stock + " units";
-        $("rQty").value = "";
-        $("rReason").value = "";
-        $("rErr").textContent = "";
-        document.getElementById("restockModal").classList.add("open");
-        return;
-      }
+      
 
       const ed = e.target.closest("[data-edit]");
       if (ed) {
@@ -636,6 +559,7 @@ while ($row = $res->fetch_assoc()) {
         $("eCat").value = p.cat;
         $("ePrice").value = p.price;
         $("eStock").value = p.stock;
+        $("eAddStock").value = 0;
         $("eDesc").value = p.desc;
         $("eSupplier").value = p.supplier || "Densco";
         $("eHidden").checked = !!p.hidden;
@@ -663,6 +587,7 @@ while ($row = $res->fetch_assoc()) {
       fd.append("name", $("eName").value.trim());
       fd.append("cat", $("eCat").value);
       fd.append("price", +$("ePrice").value || 0);
+      fd.append("add_stock", +$("eAddStock").value || 0);
       fd.append("supplier", $("eSupplier").value);
       fd.append("desc", $("eDesc").value);
       fd.append("hidden", $("eHidden").checked ? "1" : "");
@@ -717,14 +642,7 @@ while ($row = $res->fetch_assoc()) {
       location.reload();
     };
 
-    $("rSubmit").onclick = () => {
-      const res = DHP.requestRestock(reqProductId, +$("rQty").value, $("rReason").value);
-      if (!res.ok) return $("rErr").textContent = res.error;
 
-      document.getElementById("restockModal").classList.remove("open");
-      DHP.toast("Restock request sent to Admin for review");
-      render();
-    };
 
     render();
   </script>

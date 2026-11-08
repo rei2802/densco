@@ -34,7 +34,7 @@ try {
     }
 
     // Only the owner and admin may see / manage customer orders
-    if (!in_array($role, ['owner', 'admin'], true)) {
+    if (!in_array($role, ['owner', 'admin', 'inventory'], true)) {
         if ($isApi) json_out(403, ['success' => false, 'error' => 'Not allowed.']);
         header('Location: dashboard.html');
         exit;
@@ -45,8 +45,34 @@ try {
         $in     = json_decode(file_get_contents('php://input'), true);
         $oid    = (int)($in['oid'] ?? 0);
         $status = $in['status'] ?? '';
-        if ($oid <= 0 || !in_array($status, ['pending', 'confirmed', 'shipped', 'completed'], true)) {
+        if ($oid <= 0 || !in_array($status, ['pending', 'confirmed', 'shipped', 'completed', 'cancelled'], true)) {
             json_out(400, ['success' => false, 'error' => 'Invalid order or status.']);
+        }
+
+        $stmt = $conn->prepare(
+            "SELECT status FROM orders WHERE order_id = ?"
+        );
+        $stmt->bind_param("i", $oid);
+        $stmt->execute();
+
+        $order = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$order) {
+            json_out(404, [
+                'success' => false,
+                'error' => 'Order not found.'
+            ]);
+        }
+
+        if (
+            $status === 'cancelled' &&
+            $order['status'] !== 'pending'
+        ) {
+            json_out(400, [
+                'success' => false,
+                'error' => 'Only pending orders may be cancelled.'
+            ]);
         }
         $stmt = $conn->prepare("UPDATE orders SET status = ? WHERE order_id = ?");
         $stmt->bind_param("si", $status, $oid);
@@ -65,6 +91,7 @@ try {
     echo 'Server error.';
     exit;
 }
+
 ?>
 <!doctype html>
 <html lang="en">
@@ -79,7 +106,7 @@ try {
   />
   <link rel="stylesheet" href="../css/style.css" />
 </head>
-<body data-page="orders" data-roles="owner admin">
+<body data-page="orders" data-roles="owner admin inventory">
   <div class="app">
     <aside class="sidebar" id="sidebar"></aside>
     <div class="app-main">
@@ -145,9 +172,19 @@ try {
 
       const shippedLabel = o.fulfillment === "Store Pickup" ? "Ready for pickup" : "Shipped";
 
-      const statusSelect =
+      let statusSelect =
         `<select data-status="${o.oid}">` +
-        statusOption("pending", "Pending", o.status) +
+        statusOption("pending", "Pending", o.status);
+
+      if (o.status === "pending" || o.status === "cancelled") {
+          statusSelect += statusOption(
+              "cancelled",
+              "Cancelled",
+              o.status
+          );
+      }
+
+      statusSelect +=
         statusOption("confirmed", "Confirmed", o.status) +
         statusOption("shipped", shippedLabel, o.status) +
         statusOption("completed", "Completed", o.status) +
