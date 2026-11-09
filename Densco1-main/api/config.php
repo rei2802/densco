@@ -4,3 +4,5 @@ $apiKey = getenv('GEMINI_API_KEY') ?: '';
 
 // If this model name stops working, check AI Studio for a current free one
 $model = 'gemini-3.8-flash';
+
+?>
