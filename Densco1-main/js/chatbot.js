@@ -17,7 +17,7 @@
   // (home, shop, My Account, admin). A path like "api/chatbot.php" breaks as
   // soon as the page is in a different folder, for example after logging in.
   // On a live website at the domain root, change this to "/api/chatbot.php".
-  var API_URL = "/densco/Densco1-main/api/chatbot.php";
+  var API_URL = "/api/chatbot.php";
 
   var GREETING =
     "Good day! I am the Densco Assistant. How may I help you with product availability, delivery, payment or your orders?";
