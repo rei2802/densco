@@ -19,6 +19,7 @@ try {
     $phone       = trim($data["phone"] ?? "");
     $payment     = $data["payment"] ?? "";
     $proof       = $data["proof"] ?? null;
+    $referenceNumber = trim($data["reference_number"] ?? "");
     $items       = $data["items"] ?? [];
 
     // Basic validation
@@ -27,6 +28,9 @@ try {
     }
     if (empty($items)) {
         throw new Exception("Your cart is empty.");
+    }
+    if ($referenceNumber === "") {
+        throw new Exception("Payment reference number is required.");
     }
 
     // The order belongs to the customer who is logged in (checked on the server)
@@ -81,10 +85,10 @@ try {
     // Insert order
     $stmt = $conn->prepare(
         "INSERT INTO orders
-        (user_id, total_amount, status, fulfillment, address, phone, payment_method, proof)
-        VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)"
+        (user_id, total_amount, status, fulfillment, address, phone, payment_method, proof, reference_number)
+        VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?)"
     );
-    $stmt->bind_param("idsssss", $user_id, $total, $fulfillment, $address, $phone, $payment, $proof);
+    $stmt->bind_param("idssssss", $user_id, $total, $fulfillment, $address, $phone, $payment, $proof, $referenceNumber);
     $stmt->execute();
 
     // Get newly created order ID

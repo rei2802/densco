@@ -131,6 +131,18 @@ while ($row = $res->fetch_assoc()) {
             </p>
           </div>
 
+          <div class="field mt" id="refBox">
+            <label for="refNum">Payment reference number</label>
+            <input
+                  id="refNum"
+                  name="refNum"
+                  type="text"
+                  placeholder="Reference number, transaction ID, or confirmation code"
+                  maxlength="100"
+                  required>
+            <p class="muted sm" style="margin-top:6px">Enter the reference number from your receipt or deposit slip so staff can match it to your payment.</p>
+          </div>
+
         </div>
       </div>
 
@@ -312,6 +324,11 @@ while ($row = $res->fetch_assoc()) {
         return;
       }
 
+      if (!$("refNum").value.trim()) {
+        err.textContent = "Enter your payment reference number.";
+        return;
+      }
+
       const sub = L.reduce((s, l) => s + l.p.price * l.qty, 0);
       const total = sub + (del ? FEE : 0);
 
@@ -361,6 +378,7 @@ while ($row = $res->fetch_assoc()) {
           phone: $("phone").value.trim(),
           payment: pay,
           proof: proofUrl,
+          reference_number: $("refNum").value.trim(),
           items: items
         };
 
