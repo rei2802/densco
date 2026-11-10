@@ -261,8 +261,17 @@ try {
       const o = ORDERS.find((x) => String(x.oid) === b.dataset.proof);
       if (!o) return;
       $("proofTitle").textContent = "Payment proof, " + o.id;
-      $("proofBody").innerHTML =
-        `<div><strong>Uploaded file</strong><p class="muted sm mt">${DHP.esc(o.proof)}</p></div>`;
+
+      // proof is now a Cloudinary secure_url. Most uploads are images, but
+      // cart.php's #proof input also accepts PDFs, which can't render in an <img>.
+      const isPdf = /\.pdf(\?|$)/i.test(o.proof || "");
+
+      $("proofBody").innerHTML = isPdf
+        ? `<a href="${DHP.esc(o.proof)}" target="_blank" rel="noopener">Open the uploaded PDF</a>`
+        : `<a href="${DHP.esc(o.proof)}" target="_blank" rel="noopener">` +
+            `<img src="${DHP.esc(o.proof)}" alt="Payment proof" style="width:100%;height:100%;object-fit:contain;border-radius:inherit">` +
+          `</a>`;
+
       $("proofModal").classList.add("open");
     });
 

@@ -292,6 +292,8 @@ while ($row = $res->fetch_assoc()) {
       const pay = val("pay");
       const file = $("proof").files[0];
       const err = $("err");
+      const placeBtn = $("place");
+      const originalLabel = placeBtn.textContent;
 
       err.textContent = "";
 
@@ -319,18 +321,49 @@ while ($row = $res->fetch_assoc()) {
         price: l.p.price
       }));
 
-      const orderData = {
-        customer: DHP.user(),
-        total: total,
-        fulfillment: del ? "Delivery" : "Store Pickup",
-        address: del ? $("addr").value.trim() : "",
-        phone: $("phone").value.trim(),
-        payment: pay,
-        proof: file ? file.name : null,
-        items: items
-      };
+      placeBtn.disabled = true;
 
       try {
+        // Proof files can't travel inside the JSON payload below, so when one
+        // was selected it's uploaded to Cloudinary first and we send its
+        // secure_url to checkout.php instead of the file itself.
+        let proofUrl = null;
+
+        if (file) {
+          placeBtn.textContent = "Uploading proof...";
+
+          const fd = new FormData();
+          fd.append("proof", file);
+
+          const uploadRes = await fetch("api/upload-proof.php", {
+            method: "POST",
+            credentials: "same-origin",
+            body: fd
+          });
+
+          const uploadData = await uploadRes.json();
+
+          if (!uploadData.success) {
+            err.textContent = uploadData.error || "Failed to upload proof of payment.";
+            return;
+          }
+
+          proofUrl = uploadData.url;
+        }
+
+        placeBtn.textContent = "Placing order...";
+
+        const orderData = {
+          customer: DHP.user(),
+          total: total,
+          fulfillment: del ? "Delivery" : "Store Pickup",
+          address: del ? $("addr").value.trim() : "",
+          phone: $("phone").value.trim(),
+          payment: pay,
+          proof: proofUrl,
+          items: items
+        };
+
         const response = await fetch("checkout.php", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -350,6 +383,9 @@ while ($row = $res->fetch_assoc()) {
       } catch (error) {
         console.error(error);
         err.textContent = "Something went wrong while placing the order.";
+      } finally {
+        placeBtn.disabled = false;
+        placeBtn.textContent = originalLabel;
       }
     };
 
