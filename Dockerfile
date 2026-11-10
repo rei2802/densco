@@ -8,6 +8,14 @@ ENV PORT=10000
 RUN sed -i 's/Listen 80/Listen ${PORT}/' /etc/apache2/ports.conf \
  && sed -i 's/<VirtualHost \*:80>/<VirtualHost *:${PORT}>/' /etc/apache2/sites-available/000-default.conf
 
+# Composer needs something to extract the zip packages it downloads
+# (cloudinary/cloudinary_php etc.) - the base php:8.2-apache image has
+# neither `unzip` nor the PHP zip extension installed by default, which
+# makes `composer install` below fail the build.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends unzip git \
+ && rm -rf /var/lib/apt/lists/*
+
 # Install PHP dependencies (Cloudinary SDK) one level above the webroot,
 # at /var/www/vendor. config/cloudinary.php loads it via
 # `__DIR__ . '/../../vendor/autoload.php'` — two levels up from
