@@ -65,12 +65,16 @@
         .join("");
     }
 
-    function renderOrder(o) {
       if (o.status === "cancelled") {
         return `
           <div class="card order">
             <h3>${DHP.esc(o.id)}</h3>
             <span class="badge cancelled">Cancelled</span>
+            <div class="mt">
+              ${o.proof
+                ? `<button class="btn btn-line view-receipt" data-receipt="${o.oid}">View receipt</button>`
+                : `<button class="btn btn-line" disabled title="No payment proof uploaded for this order">View receipt</button>`}
+            </div>
           </div>
         `;
       }
