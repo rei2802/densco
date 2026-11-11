@@ -199,6 +199,59 @@ while ($row = $res->fetch_assoc()) {
       );
     }
 
+    // Reference number rules per payment method. Mirrors payment_lib.php, which
+    // is what checkout.php actually enforces. "max" is the most characters the
+    // field accepts. Spaces are ignored (GCash shows its reference as
+    // "1234 567 890123").
+    const REF_RULES = {
+      "GCash / QR PH": {
+        re: /^\d{12,13}$/,
+        numeric: true,
+        max: 13,
+        error: "GCash reference numbers are 12 or 13 digits (numbers only). Check your receipt."
+      },
+      "Bank Transfer": {
+        re: /^[A-Za-z0-9-]{6,30}$/,
+        numeric: false,
+        max: 30,
+        error: "Bank reference numbers must be 6 to 30 characters (letters, numbers or dashes only). Check your receipt or deposit slip."
+      }
+    };
+    const REF_DEFAULT = {
+      re: /^.{1,100}$/,
+      numeric: false,
+      max: 100,
+      error: "Enter your payment reference number."
+    };
+
+    function refRule(pay) {
+      return REF_RULES[pay] || REF_DEFAULT;
+    }
+
+    function normRef() {
+      return $("refNum").value.replace(/\s+/g, "");
+    }
+
+    // Keep the field within the selected method's limit (GCash: digits only,
+    // max 13). Spaces are removed first so a pasted "1234 567 890123" isn't
+    // cut short by a plain maxlength, which would count the spaces.
+    function limitRef() {
+      const rule = refRule(val("pay"));
+      const input = $("refNum");
+      let v = input.value.replace(/\s+/g, "");
+      if (rule.numeric) v = v.replace(/\D/g, "");
+      input.value = v.slice(0, rule.max);
+    }
+
+    function syncRefField(pay) {
+      const rule = refRule(pay);
+      const input = $("refNum");
+      input.inputMode = rule.numeric ? "numeric" : "text";
+      limitRef();
+    }
+
+    $("refNum").addEventListener("input", limitRef);
+
     function render() {
       const L = lines();
       const del = val("ful") === "delivery";
@@ -214,6 +267,7 @@ while ($row = $res->fetch_assoc()) {
       const paymentMethod = val("pay");
 
       $("proofBox").classList.toggle("hide", paymentMethod === "Cash");
+      $("refBox").classList.toggle("hide", paymentMethod === "Cash");
 
       $("paymentDetails").classList.toggle(
         "hide",
@@ -243,6 +297,7 @@ while ($row = $res->fetch_assoc()) {
         "hide",
         paymentMethod !== "Bank Transfer"
       );
+      syncRefField(paymentMethod);
       $("items").innerHTML = L.map(renderLine).join("");
 
       $("sum").innerHTML =
@@ -324,9 +379,16 @@ while ($row = $res->fetch_assoc()) {
         return;
       }
 
-      if (!$("refNum").value.trim()) {
-        err.textContent = "Enter your payment reference number.";
-        return;
+      if (pay !== "Cash") {
+        if (!normRef()) {
+          err.textContent = "Enter your payment reference number.";
+          return;
+        }
+
+        if (!refRule(pay).re.test(normRef())) {
+          err.textContent = refRule(pay).error;
+          return;
+        }
       }
 
       const sub = L.reduce((s, l) => s + l.p.price * l.qty, 0);
@@ -378,7 +440,7 @@ while ($row = $res->fetch_assoc()) {
           phone: $("phone").value.trim(),
           payment: pay,
           proof: proofUrl,
-          reference_number: $("refNum").value.trim(),
+          reference_number: pay === "Cash" ? "" : normRef(),
           items: items
         };
 

@@ -1,6 +1,7 @@
 <?php
 header("Content-Type: application/json");
 include "config.php";
+require_once "payment_lib.php";
 session_start();
 
 try {
@@ -19,8 +20,13 @@ try {
     $phone       = trim($data["phone"] ?? "");
     $payment     = $data["payment"] ?? "";
     $proof       = $data["proof"] ?? null;
-    $referenceNumber = trim($data["reference_number"] ?? "");
+    $referenceNumber = normalize_reference_number($data["reference_number"] ?? "");
     $items       = $data["items"] ?? [];
+
+    // Cash orders have no receipt, so they never carry a reference number
+    if ($payment === "Cash") {
+        $referenceNumber = "";
+    }
 
     // Basic validation
     if ($total <= 0) {
@@ -29,8 +35,9 @@ try {
     if (empty($items)) {
         throw new Exception("Your cart is empty.");
     }
-    if ($referenceNumber === "") {
-        throw new Exception("Payment reference number is required.");
+    $refError = reference_number_error($payment, $referenceNumber);
+    if ($refError !== null) {
+        throw new Exception($refError);
     }
 
     // The order belongs to the customer who is logged in (checked on the server)
