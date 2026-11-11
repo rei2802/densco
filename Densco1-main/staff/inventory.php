@@ -114,6 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Manual stock status: settable by Admin, Owner and Inventory Staff
     // (this whole page is already restricted to those three roles).
     $ALLOWED_STATUSES = ['in_stock', 'not_available'];
+    $MAX_STOCK = 99999; // highest stock a single product can hold
 
     if ($action === 'set_status') {
         $id     = intval($data['id'] ?? 0);
@@ -141,8 +142,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $delta = intval($data['delta'] ?? 0);
 
         // GREATEST(...,0) stops stock from going negative
-        $stmt = $conn->prepare("UPDATE products SET stock_quantity = GREATEST(stock_quantity + ?, 0) WHERE product_id = ?");
-        $stmt->bind_param("ii", $delta, $id);
+        $stmt = $conn->prepare("UPDATE products SET stock_quantity = LEAST(GREATEST(stock_quantity + ?, 0), ?) WHERE product_id = ?");
+        $stmt->bind_param("iii", $delta, $MAX_STOCK, $id);
         $stmt->execute();
         echo json_encode(['success' => $stmt->affected_rows >= 0]);
         $stmt->close();
@@ -186,6 +187,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $stock = $currentStock + $addStock;
+        if ($stock > $MAX_STOCK) {
+            $room = max(0, $MAX_STOCK - $currentStock);
+            echo json_encode(['success' => false, 'error' => 'Stock limit is ' . number_format($MAX_STOCK) . ' units per product. You can add at most ' . number_format($room) . ' more.']);
+            exit;
+        }
 
         $status = trim($data['status'] ?? '');
         if (!in_array($status, $ALLOWED_STATUSES, true)) {
@@ -230,6 +236,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stock = intval($data['stock'] ?? 0);
         if ($stock < 0) {
             echo json_encode(['success' => false, 'error' => 'Starting stock cannot be negative.']);
+            exit;
+        }
+        if ($stock > $MAX_STOCK) {
+            echo json_encode(['success' => false, 'error' => 'Stock limit is ' . number_format($MAX_STOCK) . ' units per product.']);
             exit;
         }
         $desc  = trim($data['desc'] ?? '') ?: 'No description yet.';
@@ -387,7 +397,7 @@ while ($row = $res->fetch_assoc()) {
             </div>
             <div class="field">
               <label>Starting stock quantity</label>
-              <input id="nStock" type="number" min="0">
+              <input id="nStock" type="number" min="0" max="99999">
             </div>
           </div>
           <div class="field">
@@ -433,7 +443,7 @@ while ($row = $res->fetch_assoc()) {
 
               <div class="field">
                 <label>Add Stock</label>
-                <input id="eAddStock" type="number" min="0" value="0">
+                <input id="eAddStock" type="number" min="0" max="99999" value="0">
               </div>
             </div>
             <div class="field">
@@ -590,6 +600,7 @@ while ($row = $res->fetch_assoc()) {
       }
     });
 
+    const MAX_STOCK = 99999; // keep in sync with $MAX_STOCK above
     // Stock fields only take whole numbers from 0 up (no minus sign, no decimals)
     ["eAddStock", "nStock"].forEach((id) => {
       const el = $(id);
@@ -598,13 +609,19 @@ while ($row = $res->fetch_assoc()) {
         if (["-", "+", "e", "E", "."].includes(e.key)) e.preventDefault();
       });
       el.addEventListener("input", () => {
-        el.value = el.value.replace(/[^0-9]/g, "");
+        el.value = el.value.replace(/[^0-9]/g, "").slice(0, 5);
+        if (+el.value > MAX_STOCK) el.value = MAX_STOCK;
       });
     });
 
     $("saveBtn").onclick = async () => {
-      if ((+$("eAddStock").value || 0) < 0) {
+      const addQty = +$("eAddStock").value || 0;
+      if (addQty < 0) {
         DHP.toast("Add Stock cannot be negative");
+        return;
+      }
+      if ((+$("eStock").value || 0) + addQty > MAX_STOCK) {
+        DHP.toast("Stock limit is " + MAX_STOCK.toLocaleString() + " units per product");
         return;
       }
       const fd = new FormData();
