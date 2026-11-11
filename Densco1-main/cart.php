@@ -81,6 +81,11 @@ while ($row = $res->fetch_assoc()) {
                   required>
           </div>
 
+          <label class="muted sm" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+            <input type="checkbox" id="saveContact" checked>
+            Save this address and number to my account
+          </label>
+
           <h3 class="mt2">Payment</h3>
           <div class="opts">
             <label class="opt">
@@ -104,6 +109,11 @@ while ($row = $res->fetch_assoc()) {
             <label for="proof">Proof of payment</label>
             <input type="file" id="proof" accept="image/*,.pdf">
             <p class="muted sm" style="margin-top:6px">Upload a screenshot or photo of your receipt or deposit slip. Staff verify it before confirming your order.</p>
+          </div>
+          <div class="field mt" id="refBox">
+            <label for="ref">Payment reference number</label>
+            <input id="ref" type="text" maxlength="40" autocomplete="off" placeholder="From your GCash / bank receipt">
+            <p class="muted sm" id="refHint" style="margin-top:6px"></p>
           </div>
           <div class="card mt hide" id="paymentDetails">
             <h3>Payment Instructions</h3>
@@ -156,6 +166,12 @@ while ($row = $res->fetch_assoc()) {
     const val = (n) => document.querySelector(`input[name=${n}]:checked`).value;
     const FEE = DHP.settings().deliveryFee;
 
+    // Mirrors payment_lib.php (the server re-checks these). Keep the two in sync.
+    const REF_RULES = {
+      "GCash / QR PH": { re: /^\d{12,13}$/, hint: "GCash reference numbers are 12 or 13 digits (numbers only).", msg: "GCash reference numbers are 12 or 13 digits (numbers only). Check your receipt." },
+      "Bank Transfer": { re: /^[A-Za-z0-9-]{6,30}$/, hint: "6 to 30 characters: letters, numbers or dashes.", msg: "Bank reference numbers must be 6 to 30 characters (letters, numbers or dashes only). Check your receipt or deposit slip." }
+    };
+
     function lines() {
       const P = DHP.products();
       return DHP.cart()
@@ -203,6 +219,8 @@ while ($row = $res->fetch_assoc()) {
       const paymentMethod = val("pay");
 
       $("proofBox").classList.toggle("hide", paymentMethod === "Cash");
+      $("refBox").classList.toggle("hide", paymentMethod === "Cash");
+      $("refHint").textContent = (REF_RULES[paymentMethod] || {}).hint || "";
 
       $("paymentDetails").classList.toggle(
         "hide",
@@ -313,6 +331,19 @@ while ($row = $res->fetch_assoc()) {
         return;
       }
 
+      const ref = $("ref").value.replace(/\s+/g, "");
+      if (pay !== "Cash") {
+        if (!ref) {
+          err.textContent = "Enter the payment reference number from your receipt.";
+          return;
+        }
+        const rule = REF_RULES[pay];
+        if (rule && !rule.re.test(ref)) {
+          err.textContent = rule.msg;
+          return;
+        }
+      }
+
       const sub = L.reduce((s, l) => s + l.p.price * l.qty, 0);
       const total = sub + (del ? FEE : 0);
 
@@ -322,6 +353,32 @@ while ($row = $res->fetch_assoc()) {
         price: l.p.price
       }));
 
+      const btn = $("place");
+      btn.disabled = true;
+      err.textContent = "";
+
+      // Upload the proof of payment first; checkout stores the returned link
+      let proofUrl = null;
+      if (pay !== "Cash" && file) {
+        try {
+          const fd = new FormData();
+          fd.append("proof", file);
+          const up = await fetch("api/upload-proof.php", { method: "POST", body: fd, credentials: "same-origin" });
+          const upData = await up.json();
+          if (!upData.success) {
+            err.textContent = upData.error || "Could not upload your proof of payment.";
+            btn.disabled = false;
+            return;
+          }
+          proofUrl = upData.url;
+        } catch (e) {
+          console.error(e);
+          err.textContent = "Could not upload your proof of payment. Please try again.";
+          btn.disabled = false;
+          return;
+        }
+      }
+
       const orderData = {
         customer: DHP.user(),
         total: total,
@@ -329,7 +386,8 @@ while ($row = $res->fetch_assoc()) {
         address: del ? $("addr").value.trim() : "",
         phone: $("phone").value.trim(),
         payment: pay,
-        proof: file ? file.name : null,
+        proof: proofUrl,
+        reference_number: pay === "Cash" ? "" : ref,
         items: items
       };
 
@@ -344,7 +402,18 @@ while ($row = $res->fetch_assoc()) {
 
         if (!data.success) {
           err.textContent = data.error || "Failed to place order.";
+          btn.disabled = false;
           return;
+        }
+
+        if ($("saveContact").checked) {
+          // best effort: don't hold up the confirmation if this fails
+          fetch("profile.php", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "contact", phone: orderData.phone, address: orderData.address })
+          }).catch(() => {});
         }
 
         DHP.saveCart([]);
@@ -352,13 +421,24 @@ while ($row = $res->fetch_assoc()) {
           type: "placed",
           orderId: data.order_id,
           items: L.map((l) => ({ name: l.p.name, qty: l.qty })),
-          onClose: () => { location.href = "account.html"; }
+          onClose: () => { location.href = "account.html#orders"; }
         });
       } catch (error) {
         console.error(error);
         err.textContent = "Something went wrong while placing the order.";
+        btn.disabled = false;
       }
     };
+
+    // Fill the address and number from the customer's saved information
+    fetch("profile.php", { credentials: "same-origin" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.success) return;
+        if (d.profile.phone && !$("phone").value) $("phone").value = d.profile.phone;
+        if (d.profile.address && !$("addr").value) $("addr").value = d.profile.address;
+      })
+      .catch(() => {});
 
     render();
   </script>

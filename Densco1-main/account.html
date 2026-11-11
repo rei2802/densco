@@ -22,6 +22,56 @@
       </div>
       <a class="btn btn-red" href="catalog.php">Continue shopping</a>
     </div>
+    <div class="card" id="profileCard">
+      <h3>My information</h3>
+      <p class="muted sm" style="margin:-6px 0 14px">Your address and mobile number are filled in automatically when you check out.</p>
+      <form id="infoForm" novalidate>
+        <div class="row2">
+          <div class="field">
+            <label for="pName">Full name</label>
+            <input id="pName" maxlength="100" autocomplete="name" required>
+          </div>
+          <div class="field">
+            <label for="pEmail">Email</label>
+            <input id="pEmail" type="email" maxlength="100" autocomplete="email" required>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="pPhone">Mobile number</label>
+            <input id="pPhone" type="tel" inputmode="numeric" maxlength="11" placeholder="09XX XXX XXXX" autocomplete="tel">
+          </div>
+          <div class="field">
+            <label for="pAddress">Delivery address</label>
+            <input id="pAddress" maxlength="255" placeholder="Street, barangay, city, province" autocomplete="street-address">
+          </div>
+        </div>
+        <p class="err" id="infoMsg" role="status"></p>
+        <button class="btn btn-red" type="submit" id="infoSave">Save changes</button>
+      </form>
+
+      <h3 style="margin-top:26px">Change password</h3>
+      <form id="pwForm" novalidate>
+        <div class="field">
+          <label for="pwCur">Current password</label>
+          <input id="pwCur" type="password" autocomplete="current-password">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="pwNew">New password</label>
+            <input id="pwNew" type="password" autocomplete="new-password" placeholder="At least 6 characters">
+          </div>
+          <div class="field">
+            <label for="pwNew2">Confirm new password</label>
+            <input id="pwNew2" type="password" autocomplete="new-password">
+          </div>
+        </div>
+        <p class="err" id="pwMsg" role="status"></p>
+        <button class="btn btn-red" type="submit" id="pwSave">Update password</button>
+      </form>
+    </div>
+
+    <h2 id="orderHistory" style="margin:28px 0 14px;font-size:20px;scroll-margin-top:90px">Order history</h2>
     <div id="orders"></div>
   </main>
 
@@ -44,6 +94,92 @@
   <script src="js/chatbot.js"></script>
   <script src="js/popup.js"></script>
   <script>
+    // ---------- My information ----------
+    (function () {
+      const $i = (id) => document.getElementById(id);
+
+      function say(el, text, ok) {
+        el.textContent = text || "";
+        el.style.color = ok ? "var(--ok)" : "";
+      }
+
+      function fill(p) {
+        $i("pName").value = p.name || "";
+        $i("pEmail").value = p.email || "";
+        $i("pPhone").value = p.phone || "";
+        $i("pAddress").value = p.address || "";
+      }
+
+      $i("pPhone").addEventListener("input", (e) => {
+        e.target.value = e.target.value.replace(/\D/g, "").slice(0, 11);
+      });
+
+      fetch("profile.php", { credentials: "same-origin" })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success) fill(d.profile);
+          else say($i("infoMsg"), d.error || "Could not load your information.");
+        })
+        .catch(() => say($i("infoMsg"), "Could not load your information."));
+
+      function post(body) {
+        return fetch("profile.php", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        }).then((r) => r.json());
+      }
+
+      $i("infoForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const msg = $i("infoMsg");
+        const name = $i("pName").value.trim();
+        const email = $i("pEmail").value.trim();
+        const phone = $i("pPhone").value.trim();
+
+        if (!name || !email) return say(msg, "Name and email are required.");
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return say(msg, "Enter a valid email address.");
+        if (phone && !/^09\d{9}$/.test(phone)) return say(msg, "Enter an 11-digit mobile number starting with 09.");
+
+        say(msg, "");
+        $i("infoSave").disabled = true;
+        post({ action: "info", name: name, email: email, phone: phone, address: $i("pAddress").value.trim() })
+          .then((d) => {
+            if (!d.success) return say(msg, d.error || "Could not save your changes.");
+            fill(d.profile);
+            DHP.login(d.profile.name);               // keep the name shown across the site
+            document.getElementById("who").textContent = d.profile.name;
+            say(msg, "Your information was saved.", true);
+            DHP.toast("Information updated");
+          })
+          .catch(() => say(msg, "Could not save your changes. Please try again."))
+          .finally(() => { $i("infoSave").disabled = false; });
+      });
+
+      $i("pwForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const msg = $i("pwMsg");
+        const cur = $i("pwCur").value, nw = $i("pwNew").value, nw2 = $i("pwNew2").value;
+
+        if (!cur || !nw) return say(msg, "Fill in your current and new password.");
+        if (nw.length < 6) return say(msg, "New password must be at least 6 characters.");
+        if (nw !== nw2) return say(msg, "The two new passwords don't match.");
+
+        say(msg, "");
+        $i("pwSave").disabled = true;
+        post({ action: "password", current: cur, new: nw, confirm: nw2 })
+          .then((d) => {
+            if (!d.success) return say(msg, d.error || "Could not update your password.");
+            $i("pwForm").reset();
+            say(msg, "Your password was updated.", true);
+            DHP.toast("Password updated");
+          })
+          .catch(() => say(msg, "Could not update your password. Please try again."))
+          .finally(() => { $i("pwSave").disabled = false; });
+      });
+    })();
+
     const me = DHP.user();
     document.getElementById("who").textContent = me;
     let ORDERS = [];
@@ -183,6 +319,11 @@
         box.innerHTML = d.orders.length
           ? d.orders.map(renderOrder).join("")
           : '<div class="card empty">You haven\'t placed an order yet. <a href="catalog.php">Browse the shop</a></div>';
+
+        // Coming from "View my orders" (account.html#orders): jump straight to the order list
+        if (location.hash === "#orders") {
+          document.getElementById("orderHistory").scrollIntoView({ block: "start" });
+        }
 
           document.querySelectorAll(".cancel-order").forEach(btn => {
             btn.addEventListener("click", () => {

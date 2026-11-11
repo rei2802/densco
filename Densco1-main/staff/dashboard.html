@@ -22,16 +22,20 @@
               <p class="muted" id="sub"></p>
             </div>
           </div>
-          <div class="grid4" id="kpis"></div>
+          <div class="grid4" id="kpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"></div>
           <div class="grid2 mt2">
             <div class="card">
               <h3>Recent orders</h3>
-              <div id="recent"></div>
+              <div id="recent"><p class="muted">Loading...</p></div>
             </div>
-            <div class="card">
-              <h3>Low stock alerts</h3>
-              <div id="low"></div>
+            <div class="card" style="margin-top:0">
+              <h3>Pending orders</h3>
+              <div id="pendingList"><p class="muted">Loading...</p></div>
             </div>
+          </div>
+          <div class="card mt2">
+            <h3>Low stock alerts</h3>
+            <div id="low"><p class="muted">Loading...</p></div>
           </div>
         </main>
       </div>
@@ -49,83 +53,100 @@
           month: "long",
           day: "numeric",
         });
-      const O = DHP.orders(),
-        P = DHP.products(),
-        active = O.filter((o) => o.status !== "completed").length,
-        lowP = P.filter((p) => DHP.state(p) !== "in");
-      const revenue = DHP.sales().reduce((s, r) => s + r.total, 0);
-      let kpis = [
-        ["Active orders", active, "orders.php"],
-        ["Products", P.length + " items", "inventory.php"],
-        ["Low stock alerts", lowP.length, "inventory.php"],
-      ];
-      if (DHP.role === "owner")
-        kpis.push(["Revenue (recent)", DHP.peso(revenue), "sales-records.php"]);
-      else if (DHP.role === "admin")
-        kpis.push([
-          "Open inquiries",
-          DHP.get("denscoInquiries", []).filter((i) => i.status === "open")
-            .length,
-          "inquiries.html",
-        ]);
-      else kpis.push(["Restock requests", lowP.length, "inventory.php"]);
-      document.getElementById("kpis").innerHTML = kpis
-        .map(
-          (k) =>
-            `<a class="kpi" href="${k[2]}" style="display:block"><small>${k[0]}</small><b>${k[1]}</b></a>`,
-        )
-        .join("");
-      document.getElementById("recent").innerHTML =
-        '<div class="list">' +
-        O.slice(0, 4)
-          .map(
-            (o) =>
-              `<div class="row"><span><b>${o.id}</b><br><span class="muted">${DHP.esc(o.customer)}, ${o.date}</span></span><span class="badge ${o.status}">${DHP.statusLabel(o)}</span></div>`,
-          )
-          .join("") +
-        "</div>";
-      document.getElementById("low").innerHTML = lowP.length
-        ? '<div class="list">' +
-          lowP
-            .map(
-              (p) =>
-                `<div class="row"><span><b>${DHP.esc(p.name)}</b><br><span class="muted">${p.cat}</span></span><span class="stock ${DHP.state(p)}">${DHP.stateLabel(p)}</span></div>`,
-            )
-            .join("") +
-          "</div>"
-        : '<p class="muted">All products are adequately stocked.</p>';
-      // Real order numbers from the database
+      // Every number on this page comes from the database (orders.php and
+      // inventory.php summaries). The one exception is "Open inquiries": chat
+      // inquiries are only stored in the browser, so that count is local.
+      const $ = (id) => document.getElementById(id);
+      const kpiLink = (label, value, href, note) =>
+        `<a class="kpi" href="${href}" style="display:block"><small>${label}</small><b>${value}</b>${note ? `<span>${note}</span>` : ""}</a>`;
+
+      const orderRow = (o, extra) =>
+        `<div class="row"><span><b>${DHP.esc(o.id)}</b><br><span class="muted">${DHP.esc(o.customer)}, ${DHP.esc(o.date)}</span></span>` +
+        (extra || `<span class="badge ${o.status}">${DHP.statusLabel(o)}</span>`) +
+        `</div>`;
+
+      let ORD = null;   // orders summary
+      let INV = null;   // inventory summary
+
+      function renderKpis() {
+        const dash = "-";
+        const k = [
+          kpiLink("Pending orders", ORD ? ORD.pending : dash, "orders.php", "Waiting for confirmation"),
+          kpiLink("Active orders", ORD ? ORD.active : dash, "orders.php", "Pending, confirmed or shipped"),
+          kpiLink("Products", INV ? INV.total + " items" : dash, "inventory.php"),
+          kpiLink("Low stock alerts", INV && INV.low_items ? INV.low_items.length : dash, "inventory.php", "Low or out of stock"),
+        ];
+        if (DHP.role === "owner") {
+          k.push(kpiLink("Revenue (completed)", ORD && ORD.revenue !== undefined ? DHP.peso(ORD.revenue) : dash, "sales-records.php"));
+        } else if (DHP.role === "admin") {
+          k.push(kpiLink("Open inquiries", DHP.get("denscoInquiries", []).filter((i) => i.status === "open").length, "inquiries.html"));
+        } else {
+          k.push(kpiLink("Needs restocking", INV && INV.low_items ? INV.low_items.length : dash, "inventory.php"));
+        }
+        $("kpis").innerHTML = k.join("");
+      }
+
+      function renderOrders() {
+        if (!ORD) return;
+        $("recent").innerHTML = ORD.recent.length
+          ? '<div class="list">' + ORD.recent.map((o) => orderRow(o)).join("") + "</div>"
+          : '<p class="muted">No orders yet.</p>';
+
+        $("pendingList").innerHTML = ORD.pending_list.length
+          ? '<div class="list">' +
+            ORD.pending_list.map((o) => orderRow(o, `<span><b>${DHP.peso(o.total)}</b></span>`)).join("") +
+            "</div>" +
+            (ORD.pending > ORD.pending_list.length
+              ? `<p class="muted sm mt"><a href="orders.php">View all ${ORD.pending} pending orders</a></p>`
+              : `<p class="muted sm mt"><a href="orders.php">Open the orders page</a></p>`)
+          : '<p class="muted">No pending orders. You\'re all caught up.</p>';
+      }
+
+      function renderLow() {
+        if (!INV || !INV.low_items) return;
+        const low = DHP.settings().lowStock;
+        $("low").innerHTML = INV.low_items.length
+          ? '<div class="list">' +
+            INV.low_items
+              .map((p) => {
+                const out = p.stock <= 0;
+                return `<div class="row"><span><b>${DHP.esc(p.name)}</b><br><span class="muted">${DHP.esc(p.cat)}</span></span>` +
+                  `<span class="stock ${out ? "out" : "low"}">${out ? "Out of stock" : p.stock + " units left"}</span></div>`;
+              })
+              .join("") +
+            "</div>"
+          : `<p class="muted">All products are above the low-stock level (${low} units).</p>`;
+      }
+
+      renderKpis();
+
       fetch("orders.php?summary=1", { credentials: "same-origin" })
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
-          if (!d || !d.success) return;
-          const k = document.querySelector("#kpis .kpi b");
-          if (k) k.textContent = d.active;
-          document.getElementById("recent").innerHTML = d.recent.length
-            ? '<div class="list">' +
-              d.recent
-                .map(
-                  (o) =>
-                    `<div class="row"><span><b>${DHP.esc(o.id)}</b><br><span class="muted">${DHP.esc(o.customer)}, ${DHP.esc(o.date)}</span></span><span class="badge ${o.status}">${DHP.statusLabel(o)}</span></div>`,
-                )
-                .join("") +
-              "</div>"
-            : '<p class="muted">No orders yet.</p>';
+          if (d && d.success) ORD = d;
+          renderKpis();
+          renderOrders();
+          if (!ORD) {
+            $("recent").innerHTML = '<p class="muted">Could not load orders.</p>';
+            $("pendingList").innerHTML = '<p class="muted">Could not load orders.</p>';
+          }
         })
-        .catch(() => {});
+        .catch(() => {
+          $("recent").innerHTML = '<p class="muted">Could not load orders.</p>';
+          $("pendingList").innerHTML = '<p class="muted">Could not load orders.</p>';
+        });
 
-      // Real product count from the database (this page is static HTML, so
-      // DHP.products() above is always empty — it was showing "0 items" on
-      // all three dashboards). Matches the count shown on the Shop (products
-      // that aren't hidden).
-      fetch("inventory.php?summary=1", { credentials: "same-origin" })
+      fetch("inventory.php?summary=1&low=" + encodeURIComponent(DHP.settings().lowStock), { credentials: "same-origin" })
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
-          if (!d || !d.success) return;
-          const nodes = document.querySelectorAll("#kpis .kpi b");
-          if (nodes[1]) nodes[1].textContent = d.total + " items";
+          if (d && d.success) INV = d;
+          renderKpis();
+          renderLow();
+          if (!INV || !INV.low_items) $("low").innerHTML = '<p class="muted">Could not load stock levels.</p>';
         })
-        .catch(() => {});
+        .catch(() => {
+          $("low").innerHTML = '<p class="muted">Could not load stock levels.</p>';
+        });
     </script>
   </body>
 </html>

@@ -1120,3 +1120,14 @@ label.opt span{font-size:12px;color:var(--mute)}
 .pcard.is-soldout .pthumb { opacity: .5; filter: grayscale(1); }
 .pcard.is-soldout .pname { color: #777; }
 .pcard.is-soldout .btn[disabled] { cursor: not-allowed; }
+
+
+/* Order status dropdown (staff Orders page): colour follows the selected status */
+.status-sel{font-weight:600;border-radius:999px;padding:6px 28px 6px 12px;border:1px solid transparent;cursor:pointer}
+.status-sel option{background:#fff;color:#111;font-weight:500}
+.status-sel.st-pending{background-color:#FEF3C7;color:#92400E;border-color:#FCD34D}
+.status-sel.st-confirmed{background-color:#DBEAFE;color:#1E40AF;border-color:#93C5FD}
+.status-sel.st-shipped{background-color:#EDE9FE;color:#5B21B6;border-color:#C4B5FD}
+.status-sel.st-completed{background-color:#DCFCE7;color:#166534;border-color:#86EFAC}
+.status-sel.st-cancelled{background-color:#FEE2E2;color:#991B1B;border-color:#FCA5A5}
+.status-sel:disabled{opacity:1;cursor:not-allowed}

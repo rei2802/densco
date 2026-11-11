@@ -23,14 +23,32 @@ try {
     require_once '../config.php';
     require_once '../orders_lib.php';
 
-    // Small summary for the dashboard: any staff role may read it
+    // Summary for the dashboard: any staff role may read it. All numbers come
+    // straight from the orders table.
     if (isset($_GET['summary'])) {
-        $row = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE status NOT IN ('completed','cancelled')")->fetch_assoc();
-        json_out(200, [
-            'success' => true,
-            'active'  => (int)$row['c'],
-            'recent'  => fetch_orders($conn, null, 4),
-        ]);
+        $all = fetch_orders($conn);                 // newest first
+        $count = ['pending' => 0, 'confirmed' => 0, 'shipped' => 0, 'completed' => 0, 'cancelled' => 0];
+        $revenue = 0.0;
+        $pending = [];
+        foreach ($all as $o) {
+            if (isset($count[$o['status']])) $count[$o['status']]++;
+            if ($o['status'] === 'completed') $revenue += $o['total'];
+        }
+        // Pending orders that have waited longest come first
+        foreach (array_reverse($all) as $o) {
+            if ($o['status'] === 'pending') $pending[] = $o;
+        }
+        $payload = [
+            'success'       => true,
+            'active'        => $count['pending'] + $count['confirmed'] + $count['shipped'],
+            'pending'       => $count['pending'],
+            'completed'     => $count['completed'],
+            'pending_list'  => array_slice($pending, 0, 5),
+            'recent'        => array_slice($all, 0, 4),
+        ];
+        // Revenue is only shown to the owner
+        if ($role === 'owner') $payload['revenue'] = $revenue;
+        json_out(200, $payload);
     }
 
     // Only the owner and admin may see / manage customer orders
@@ -123,7 +141,7 @@ try {
               <h3 id="proofTitle">Payment proof</h3>
               <button class="modal-x" data-close>&times;</button>
             </div>
-            <div class="proof" id="proofBody"></div>
+            <div class="proof" id="proofBody" style="height:auto;min-height:200px;overflow:hidden"></div>
             <button class="btn btn-line" data-close>Close</button>
           </div>
         </div>
@@ -156,12 +174,12 @@ try {
       let statusSelect;
       if (o.status === "cancelled") {
         statusSelect =
-          `<select data-status="${o.oid}" disabled title="Cancelled orders can't be changed">` +
+          `<select class="status-sel st-cancelled" data-status="${o.oid}" disabled title="Cancelled orders can't be changed">` +
           statusOption("cancelled", "Cancelled", o.status) +
           `</select>`;
       } else {
         statusSelect =
-          `<select data-status="${o.oid}">` +
+          `<select class="status-sel st-${o.status}" data-status="${o.oid}">` +
           statusOption("pending", "Pending", o.status) +
           (o.status === "pending" ? statusOption("cancelled", "Cancelled", o.status) : "") +
           statusOption("confirmed", "Confirmed", o.status) +
@@ -250,7 +268,7 @@ try {
       $("proofBody").innerHTML = isPdf
         ? `<a href="${DHP.esc(o.proof)}" target="_blank" rel="noopener">Open the uploaded PDF</a>`
         : `<a href="${DHP.esc(o.proof)}" target="_blank" rel="noopener">` +
-            `<img src="${DHP.esc(o.proof)}" alt="Payment proof" style="width:100%;height:100%;object-fit:contain;border-radius:inherit">` +
+            `<img src="${DHP.esc(o.proof)}" alt="Payment proof" style="display:block;max-width:100%;max-height:60vh;margin:0 auto;object-fit:contain;border-radius:inherit">` +
           `</a>`;
 
       $("proofModal").classList.add("open");
@@ -281,6 +299,7 @@ try {
 
       const oid = Number(s.dataset.status);
       const status = s.value;
+      s.className = "status-sel st-" + status;
 
       if (status !== "cancelled") {
         saveStatus(oid, status);

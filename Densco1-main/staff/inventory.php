@@ -54,9 +54,37 @@ function handleProductImageUpload($fileKey)
 // ============================================
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['summary'])) {
     header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    if (session_status() === PHP_SESSION_NONE) session_start();
+
     $res = $conn->query("SELECT COUNT(*) AS c FROM products WHERE hidden = 0");
     $row = $res->fetch_assoc();
-    echo json_encode(['success' => true, 'total' => (int)$row['c']]);
+    $out = ['success' => true, 'total' => (int)$row['c']];
+
+    // Low / out of stock list (staff only). Same rule as the Inventory page:
+    // 0 = out of stock, up to the low-stock level from Settings = low stock.
+    if (!empty($_SESSION['staff_role'])) {
+        $low = max(1, (int)($_GET['low'] ?? 10));
+        $stmt = $conn->prepare(
+            "SELECT product_name, category, stock_quantity FROM products
+             WHERE hidden = 0 AND stock_quantity <= ?
+             ORDER BY stock_quantity ASC, product_name ASC"
+        );
+        $stmt->bind_param("i", $low);
+        $stmt->execute();
+        $items = [];
+        $r = $stmt->get_result();
+        while ($p = $r->fetch_assoc()) {
+            $items[] = [
+                'name'  => $p['product_name'],
+                'cat'   => $p['category'],
+                'stock' => max(0, (int)$p['stock_quantity']),
+            ];
+        }
+        $stmt->close();
+        $out['low_items'] = $items;
+    }
+    echo json_encode($out);
     exit;
 }
 

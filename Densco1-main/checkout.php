@@ -1,6 +1,7 @@
 <?php
 header("Content-Type: application/json");
 include "config.php";
+require_once "payment_lib.php";
 session_start();
 
 try {
@@ -20,6 +21,7 @@ try {
     $payment     = $data["payment"] ?? "";
     $proof       = $data["proof"] ?? null;
     $items       = $data["items"] ?? [];
+    $reference   = normalize_reference_number($data["reference_number"] ?? "");
 
     // Phone validation
     if (!preg_match('/^09\d{9}$/', $phone)) {
@@ -36,6 +38,19 @@ try {
         throw new Exception("Your cart is empty.");
     }
 
+    // Payment proof + reference number rules (Cash needs neither)
+    if ($payment !== "Cash") {
+        if (empty($proof)) {
+            throw new Exception("Upload your proof of payment for " . $payment . ".");
+        }
+        $refError = reference_number_error($payment, $reference);
+        if ($refError !== null) {
+            throw new Exception($refError);
+        }
+    } else {
+        $reference = "";
+    }
+
     // The order belongs to the customer who is logged in (checked on the server)
     $user_id = (int)($_SESSION["user_id"] ?? 0);
     if ($user_id <= 0) {
@@ -49,6 +64,22 @@ try {
         throw new Exception("Customer account not found. Please log in again.");
     }
     $stmt->close();
+
+    // Make sure orders can store the payment reference number. Older databases
+    // don't have the column yet; add it here, BEFORE the transaction starts
+    // (ALTER TABLE would otherwise commit the transaction early).
+    $hasRef = false;
+    $cols = $conn->query("SHOW COLUMNS FROM orders LIKE 'reference_number'");
+    if ($cols && $cols->num_rows > 0) {
+        $hasRef = true;
+    } else {
+        try {
+            $conn->query("ALTER TABLE orders ADD COLUMN reference_number VARCHAR(100) NULL");
+            $hasRef = true;
+        } catch (Throwable $e) {
+            error_log('checkout.php: could not add reference_number column: ' . $e->getMessage());
+        }
+    }
 
     // Start transaction
     $conn->begin_transaction();
@@ -101,12 +132,21 @@ try {
     $decrementStmt->close();
 
     // Insert order
-    $stmt = $conn->prepare(
-        "INSERT INTO orders
-        (user_id, total_amount, status, fulfillment, address, phone, payment_method, proof)
-        VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)"
-    );
-    $stmt->bind_param("idsssss", $user_id, $total, $fulfillment, $address, $phone, $payment, $proof);
+    if ($hasRef) {
+        $stmt = $conn->prepare(
+            "INSERT INTO orders
+            (user_id, total_amount, status, fulfillment, address, phone, payment_method, proof, reference_number)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?)"
+        );
+        $stmt->bind_param("idssssss", $user_id, $total, $fulfillment, $address, $phone, $payment, $proof, $reference);
+    } else {
+        $stmt = $conn->prepare(
+            "INSERT INTO orders
+            (user_id, total_amount, status, fulfillment, address, phone, payment_method, proof)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)"
+        );
+        $stmt->bind_param("idsssss", $user_id, $total, $fulfillment, $address, $phone, $payment, $proof);
+    }
     $stmt->execute();
 
     // Get newly created order ID
@@ -140,3 +180,5 @@ try {
 }
 
 $conn->close();
+
+?>
