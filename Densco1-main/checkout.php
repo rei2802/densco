@@ -21,6 +21,14 @@ try {
     $proof       = $data["proof"] ?? null;
     $items       = $data["items"] ?? [];
 
+    // Phone validation
+    if (!preg_match('/^09\d{9}$/', $phone)) {
+        throw new Exception(
+            "Invalid phone number. Please enter an 11-digit mobile number starting with 09."
+        );
+    }
+
+
     // Basic validation
     if ($total <= 0) {
         throw new Exception("Invalid order total.");
