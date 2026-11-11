@@ -1094,12 +1094,13 @@ label.opt span{font-size:12px;color:var(--mute)}
     color:#dc2626;
 }
 
-/* Order pop-ups (order placed / order cancelled) - built on .modal */
+/* Order pop-ups (order placed / order cancelled / cancel confirmation) - built on .modal */
 .pop-box{max-width:420px;text-align:center;padding:32px 28px 26px;animation:popIn .18s ease-out}
 .pop-ico{width:60px;height:60px;border-radius:50%;display:grid;place-items:center;margin:0 auto 16px}
 .pop-ico svg{width:28px;height:28px}
 .pop-ico.ok{background:#DCFCE7;color:var(--ok)}
 .pop-ico.bad{background:var(--red-l);color:var(--red)}
+.pop-ico.warn{background:#FEF3C7;color:var(--warn)}
 .pop-box h3{font-size:20px;font-weight:700}
 .pop-sub{margin-top:6px;font-size:14px;color:var(--mute)}
 .pop-det{margin:20px 0 22px;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
@@ -1110,5 +1111,9 @@ label.opt span{font-size:12px;color:var(--mute)}
 .pop-items{margin-top:6px;max-height:140px;overflow-y:auto}
 .pop-item{display:flex;justify-content:space-between;gap:16px;padding:3px 0;color:var(--ink);font-weight:500}
 .pop-item .muted{font-weight:600;white-space:nowrap}
+.pop-acts{display:flex;gap:10px}
+.pop-acts .btn{flex:1}
 @keyframes popIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.pop-box{animation:none}}
+
+

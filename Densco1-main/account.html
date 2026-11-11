@@ -189,30 +189,36 @@
               const orderId = btn.dataset.id;
               console.log("Order ID being sent:", orderId);
 
-              if (!confirm("Cancel this order?")) return;
+              const o = ORDERS.find((x) => String(x.oid) === String(orderId)) || {};
+              // summary looks like "Product A ×1, Product B ×2"
+              const items = [...(o.summary || "").matchAll(/(?:^|,\s)(.+?)\s×(\d+)(?=,\s|$)/g)]
+                .map((m) => ({ name: m[1], qty: m[2] }));
+              const shownItems = items.length ? items : [{ name: o.summary || "" }];
 
-              fetch("cancel_order.php", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/x-www-form-urlencoded"
-                },
-                body: `order_id=${encodeURIComponent(orderId)}`
-              })
-              .then(r => r.json())
-              .then(data => {
-                if (data.success) {
-                  const o = ORDERS.find((x) => String(x.oid) === String(orderId)) || {};
-                  // summary looks like "Product A ×1, Product B ×2"
-                  const items = [...(o.summary || "").matchAll(/(?:^|,\s)(.+?)\s×(\d+)(?=,\s|$)/g)]
-                    .map((m) => ({ name: m[1], qty: m[2] }));
-                  DHP.orderPopup({
-                    type: "cancelled",
-                    orderId: o.id || orderId,
-                    items: items.length ? items : [{ name: o.summary || "" }],
-                    onClose: () => location.reload()
+              DHP.confirmCancelPopup({
+                orderId: o.id || orderId,
+                items: shownItems,
+                onConfirm: () => {
+                  fetch("cancel_order.php", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    body: `order_id=${encodeURIComponent(orderId)}`
+                  })
+                  .then(r => r.json())
+                  .then(data => {
+                    if (data.success) {
+                      DHP.orderPopup({
+                        type: "cancelled",
+                        orderId: o.id || orderId,
+                        items: shownItems,
+                        onClose: () => location.reload()
+                      });
+                    } else {
+                      alert(data.error);
+                    }
                   });
-                } else {
-                  alert(data.error);
                 }
               });
             });
