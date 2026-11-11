@@ -1,47 +1,26 @@
 <?php
-
-// header('Content-Type: application/json');
-
-// echo json_encode([
-//     'success' => true,
-//     'received' => $_POST
-// ]);
-
+// Customer cancels one of THEIR OWN pending orders. The stock reserved at
+// checkout is returned to the shop in the same transaction.
 session_start();
-require 'config.php';
+require_once 'config.php';
+require_once 'orders_lib.php';
 
 header('Content-Type: application/json');
 
-$orderId = $_POST['order_id'] ?? '';
-
-if (!$orderId) {
-    echo json_encode([
-        'success' => false,
-        'error' => 'Missing order ID'
-    ]);
+$userId = (int)($_SESSION['user_id'] ?? 0);
+if ($userId <= 0) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'Please log in again.']);
     exit;
 }
 
-$stmt = $conn->prepare("
-    UPDATE orders
-    SET status = 'cancelled'
-    WHERE order_id = ?
-    AND status = 'pending'
-");
-
-$stmt->bind_param("i", $orderId);
-
-$stmt->execute();
-
-if ($stmt->affected_rows > 0) {
-    echo json_encode([
-        'success' => true
-    ]);
-} else {
-    echo json_encode([
-        'success' => false,
-        'error' => 'Order not found or already processed.'
-    ]);
+$orderId = (int)($_POST['order_id'] ?? 0);
+if ($orderId <= 0) {
+    echo json_encode(['success' => false, 'error' => 'Missing order ID']);
+    exit;
 }
 
-?>
+$r = change_order_status($conn, $orderId, 'cancelled', $userId);
+echo json_encode($r['ok']
+    ? ['success' => true]
+    : ['success' => false, 'error' => $r['error']]);

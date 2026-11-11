@@ -213,7 +213,8 @@
           ? "Ready for pickup"
           : "Out for delivery",
       completed: "Completed",
-    }[o.status];
+      cancelled: "Cancelled",
+    }[o.status] || "Pending";
   };
 
   var SALES = [

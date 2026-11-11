@@ -58,12 +58,24 @@ try {
     // simultaneous checkouts can't both oversell the same item)
     // ============================================
     $stockStmt = $conn->prepare("SELECT stock_quantity, product_name FROM products WHERE product_id = ? FOR UPDATE");
-    $decrementStmt = $conn->prepare("UPDATE products SET stock_quantity = stock_quantity - ? WHERE product_id = ?");
+    // The "AND stock_quantity >= ?" guard means stock can never drop below zero,
+    // even if something else changed it a moment ago.
+    $decrementStmt = $conn->prepare("UPDATE products SET stock_quantity = stock_quantity - ? WHERE product_id = ? AND stock_quantity >= ?");
 
+    // Merge duplicate product lines and reject zero / negative quantities
+    // (a negative quantity would otherwise ADD stock).
+    $merged = [];
     foreach ($items as $item) {
-        $product_id = intval($item["product_id"]);
-        $quantity = intval($item["quantity"]);
+        $product_id = intval($item["product_id"] ?? 0);
+        $quantity = intval($item["quantity"] ?? 0);
+        if ($product_id <= 0 || $quantity < 1) {
+            throw new Exception("Invalid quantity in your cart.");
+        }
+        $merged[$product_id] = ($merged[$product_id] ?? 0) + $quantity;
+    }
+    ksort($merged); // consistent lock order avoids deadlocks between checkouts
 
+    foreach ($merged as $product_id => $quantity) {
         $stockStmt->bind_param("i", $product_id);
         $stockStmt->execute();
         $stockResult = $stockStmt->get_result();
@@ -72,15 +84,18 @@ try {
         if (!$product) {
             throw new Exception("A product in your cart no longer exists.");
         }
-        if ($product["stock_quantity"] < $quantity) {
+        if ((int)$product["stock_quantity"] < $quantity) {
             throw new Exception(
                 "Not enough stock for " . $product["product_name"] .
-                " (only " . $product["stock_quantity"] . " left)."
+                " (only " . max(0, (int)$product["stock_quantity"]) . " left)."
             );
         }
 
-        $decrementStmt->bind_param("ii", $quantity, $product_id);
+        $decrementStmt->bind_param("iii", $quantity, $product_id, $quantity);
         $decrementStmt->execute();
+        if ($decrementStmt->affected_rows < 1) {
+            throw new Exception("Not enough stock for " . $product["product_name"] . ".");
+        }
     }
     $stockStmt->close();
     $decrementStmt->close();
@@ -108,7 +123,7 @@ try {
     foreach ($items as $item) {
         $product_id = intval($item["product_id"]);
         $quantity = intval($item["quantity"]);
-        $price = floatval($item["price"]);
+        $price = floatval($item["price"] ?? 0);
 
         $stmt->bind_param("iiid", $order_id, $product_id, $quantity, $price);
         $stmt->execute();

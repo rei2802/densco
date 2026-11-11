@@ -101,6 +101,22 @@
     });
   };
 
+  /* Error / info notice (replaces alert()): DHP.noticePopup({ title, sub, orderId, items, onClose }) */
+  D.noticePopup = function (o) {
+    show({
+      kind: "warn",
+      title: D.esc(o.title || "Notice"),
+      sub: D.esc(o.sub || ""),
+      orderId: o.orderId,
+      items: o.items,
+      buttons: [{ key: "ok", label: "OK", cls: "btn-red" }],
+      focus: "ok",
+      done: function () {
+        if (o.onClose) o.onClose();
+      }
+    });
+  };
+
   D.confirmCancelPopup = function (o) {
     show({
       kind: "warn",
@@ -114,7 +130,11 @@
       ],
       focus: "keep",
       done: function (key) {
-        if (key === "yes" && o.onConfirm) o.onConfirm();
+        if (key === "yes") {
+          if (o.onConfirm) o.onConfirm();
+        } else if (o.onKeep) {
+          o.onKeep();
+        }
       }
     });
   };

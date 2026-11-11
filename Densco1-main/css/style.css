@@ -134,7 +134,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 
 .badge.low,.badge.pending,.badge.warn{background:#FEF3C7;color:#92400E}
 
-.badge.out{background:#FEE2E2;color:#991B1B}
+.badge.out,.badge.cancelled{background:#FEE2E2;color:#991B1B}
 
 .badge.confirmed,.badge.online{background:#DBEAFE;color:#1E40AF}
 

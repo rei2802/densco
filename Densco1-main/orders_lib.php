@@ -72,3 +72,84 @@ function fetch_orders(mysqli $conn, $userId = null, $limit = null) {
 
     return array_values($orders);
 }
+
+/**
+ * Changes an order's status safely (used by both the customer cancel button and
+ * the staff Orders page, so the rules live in one place).
+ *
+ *  - Everything runs in one transaction, with the order row locked.
+ *  - Only a PENDING order can be cancelled.
+ *  - A CANCELLED order is final (its stock was already returned, so it can't be
+ *    re-opened without re-reserving stock).
+ *  - Cancelling returns every item's quantity to products.stock_quantity, once.
+ *
+ * $userId: when set, the order must belong to that customer.
+ * Returns ['ok' => bool, 'error' => string|null, 'code' => int HTTP-style].
+ */
+function change_order_status(mysqli $conn, $orderId, $newStatus, $userId = null) {
+    $allowed = ['pending', 'confirmed', 'shipped', 'completed', 'cancelled'];
+    $orderId = (int)$orderId;
+    if ($orderId <= 0 || !in_array($newStatus, $allowed, true)) {
+        return ['ok' => false, 'error' => 'Invalid order or status.', 'code' => 400];
+    }
+
+    $conn->begin_transaction();
+    try {
+        $stmt = $conn->prepare("SELECT status, user_id FROM orders WHERE order_id = ? FOR UPDATE");
+        $stmt->bind_param("i", $orderId);
+        $stmt->execute();
+        $order = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$order || ($userId !== null && (int)$order['user_id'] !== (int)$userId)) {
+            $conn->rollback();
+            return ['ok' => false, 'error' => 'Order not found.', 'code' => 404];
+        }
+
+        $current = $order['status'] ?: 'pending';
+
+        if ($current === $newStatus) {
+            $conn->commit();
+            return ['ok' => true, 'error' => null, 'code' => 200];
+        }
+        if ($current === 'cancelled') {
+            $conn->rollback();
+            return ['ok' => false, 'error' => 'This order was cancelled and can no longer be changed.', 'code' => 400];
+        }
+        if ($newStatus === 'cancelled' && $current !== 'pending') {
+            $conn->rollback();
+            return ['ok' => false, 'error' => 'Only pending orders can be cancelled. This order is already ' . $current . '.', 'code' => 400];
+        }
+
+        $upd = $conn->prepare("UPDATE orders SET status = ? WHERE order_id = ?");
+        $upd->bind_param("si", $newStatus, $orderId);
+        $upd->execute();
+        $upd->close();
+
+        // Cancelled: put the reserved stock back (the order was pending, so it was
+        // reserved at checkout and has not been returned before).
+        if ($newStatus === 'cancelled') {
+            $items = $conn->prepare("SELECT product_id, SUM(quantity) AS qty FROM order_items WHERE order_id = ? GROUP BY product_id");
+            $items->bind_param("i", $orderId);
+            $items->execute();
+            $rows = $items->get_result()->fetch_all(MYSQLI_ASSOC);
+            $items->close();
+
+            $restock = $conn->prepare("UPDATE products SET stock_quantity = stock_quantity + ? WHERE product_id = ?");
+            foreach ($rows as $r) {
+                $qty = max(0, (int)$r['qty']);
+                $pid = (int)$r['product_id'];
+                $restock->bind_param("ii", $qty, $pid);
+                $restock->execute();
+            }
+            $restock->close();
+        }
+
+        $conn->commit();
+        return ['ok' => true, 'error' => null, 'code' => 200];
+    } catch (Throwable $e) {
+        $conn->rollback();
+        error_log('change_order_status failed: ' . $e->getMessage());
+        return ['ok' => false, 'error' => 'Could not update the order. Please try again.', 'code' => 500];
+    }
+}

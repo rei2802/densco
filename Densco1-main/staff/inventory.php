@@ -180,7 +180,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $currentStock = $curRow ? (int)$curRow['stock_quantity'] : 0;
         $addStock = intval($data['add_stock'] ?? 0);
 
+        // Stock can never go below zero (e.g. a negative "add stock" bigger than what is on hand)
         $stock = $currentStock + $addStock;
+        if ($stock < 0) {
+            echo json_encode(['success' => false, 'error' => 'Stock cannot go below 0. There are only ' . max(0, $currentStock) . ' units on hand.']);
+            exit;
+        }
         $status = trim($data['status'] ?? '');
         if (!in_array($status, $ALLOWED_STATUSES, true)) {
             $status = $curRow ? $curRow['availability_status'] : 'in_stock';
@@ -222,6 +227,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cat   = trim($data['cat'] ?? '');
         $price = floatval($data['price'] ?? 0);
         $stock = intval($data['stock'] ?? 0);
+        if ($stock < 0) {
+            echo json_encode(['success' => false, 'error' => 'Starting stock cannot be negative.']);
+            exit;
+        }
         $desc  = trim($data['desc'] ?? '') ?: 'No description yet.';
 
         if (!in_array($cat, $ALLOWED_CATEGORIES, true)) {

@@ -25,7 +25,7 @@ try {
 
     // Small summary for the dashboard: any staff role may read it
     if (isset($_GET['summary'])) {
-        $row = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE status <> 'completed'")->fetch_assoc();
+        $row = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE status NOT IN ('completed','cancelled')")->fetch_assoc();
         json_out(200, [
             'success' => true,
             'active'  => (int)$row['c'],
@@ -49,35 +49,11 @@ try {
             json_out(400, ['success' => false, 'error' => 'Invalid order or status.']);
         }
 
-        $stmt = $conn->prepare(
-            "SELECT status FROM orders WHERE order_id = ?"
-        );
-        $stmt->bind_param("i", $oid);
-        $stmt->execute();
-
-        $order = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
-
-        if (!$order) {
-            json_out(404, [
-                'success' => false,
-                'error' => 'Order not found.'
-            ]);
+        // Same rules as the customer's cancel button; cancelling returns the stock.
+        $r = change_order_status($conn, $oid, $status);
+        if (!$r['ok']) {
+            json_out($r['code'], ['success' => false, 'error' => $r['error']]);
         }
-
-        if (
-            $status === 'cancelled' &&
-            $order['status'] !== 'pending'
-        ) {
-            json_out(400, [
-                'success' => false,
-                'error' => 'Only pending orders may be cancelled.'
-            ]);
-        }
-        $stmt = $conn->prepare("UPDATE orders SET status = ? WHERE order_id = ?");
-        $stmt->bind_param("si", $status, $oid);
-        $stmt->execute();
-        $stmt->close();
         json_out(200, ['success' => true]);
     }
 
@@ -156,6 +132,7 @@ try {
 
   <script src="../js/store.js"></script>
   <script src="../js/staff-portal.js"></script>
+  <script src="../js/popup.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     let term = "";
@@ -173,23 +150,24 @@ try {
 
       const shippedLabel = o.fulfillment === "Store Pickup" ? "Ready for pickup" : "Shipped";
 
-      let statusSelect =
-        `<select data-status="${o.oid}">` +
-        statusOption("pending", "Pending", o.status);
-
-      if (o.status === "pending" || o.status === "cancelled") {
-          statusSelect += statusOption(
-              "cancelled",
-              "Cancelled",
-              o.status
-          );
+      // A cancelled order is final (its stock was already returned), so it is shown
+      // locked. "Cancelled" can only be chosen while the order is still pending.
+      let statusSelect;
+      if (o.status === "cancelled") {
+        statusSelect =
+          `<select data-status="${o.oid}" disabled title="Cancelled orders can't be changed">` +
+          statusOption("cancelled", "Cancelled", o.status) +
+          `</select>`;
+      } else {
+        statusSelect =
+          `<select data-status="${o.oid}">` +
+          statusOption("pending", "Pending", o.status) +
+          (o.status === "pending" ? statusOption("cancelled", "Cancelled", o.status) : "") +
+          statusOption("confirmed", "Confirmed", o.status) +
+          statusOption("shipped", shippedLabel, o.status) +
+          statusOption("completed", "Completed", o.status) +
+          `</select>`;
       }
-
-      statusSelect +=
-        statusOption("confirmed", "Confirmed", o.status) +
-        statusOption("shipped", shippedLabel, o.status) +
-        statusOption("completed", "Completed", o.status) +
-        `</select>`;
 
       const contact = [o.address, o.phone].filter(Boolean).map(DHP.esc).join(" · ");
       const fulfillCell =
@@ -277,29 +255,47 @@ try {
       $("proofModal").classList.add("open");
     });
 
+    function saveStatus(oid, status) {
+      return fetch("orders.php", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oid: oid, status: status })
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (!d.success) throw new Error(d.error || "Could not update the order.");
+          // Reload so the table (and any stock-dependent info) matches the server
+          return load().then(() => DHP.toast(status === "cancelled" ? "Order cancelled, stock returned" : "Order updated"));
+        })
+        .catch((err) => {
+          DHP.toast(err.message || "Could not update the order");
+          return load(); // put the dropdown back to the real status
+        });
+    }
+
     $("rows").addEventListener("change", (e) => {
       const s = e.target.closest("[data-status]");
       if (!s) return;
 
       const oid = Number(s.dataset.status);
-      fetch("orders.php", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ oid: oid, status: s.value })
-      })
-        .then((r) => r.json())
-        .then((d) => {
-          if (!d.success) throw new Error(d.error);
-          ORDERS.forEach((o) => {
-            if (o.oid === oid) o.status = s.value;
-          });
-          DHP.toast("Order updated");
-        })
-        .catch(() => {
-          DHP.toast("Could not update the order");
-          load();
-        });
+      const status = s.value;
+
+      if (status !== "cancelled") {
+        saveStatus(oid, status);
+        return;
+      }
+
+      // Cancelling is permanent and returns the items to stock: confirm first.
+      const o = ORDERS.find((x) => x.oid === oid) || {};
+      const items = [...(o.summary || "").matchAll(/(?:^|,\s)(.+?)\s×(\d+)(?=,\s|$)/g)]
+        .map((m) => ({ name: m[1], qty: m[2] }));
+      DHP.confirmCancelPopup({
+        orderId: o.id || String(oid),
+        items: items.length ? items : [{ name: o.summary || "" }],
+        onConfirm: () => saveStatus(oid, "cancelled"),
+        onKeep: () => load()
+      });
     });
 
     render();
