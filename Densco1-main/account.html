@@ -42,6 +42,7 @@
   <script src="js/store.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/chatbot.js"></script>
+  <script src="js/popup.js"></script>
   <script>
     const me = DHP.user();
     document.getElementById("who").textContent = me;
@@ -200,8 +201,16 @@
               .then(r => r.json())
               .then(data => {
                 if (data.success) {
-                  alert("Order cancelled.");
-                  location.reload();
+                  const o = ORDERS.find((x) => String(x.oid) === String(orderId)) || {};
+                  // summary looks like "Product A ×1, Product B ×2"
+                  const items = [...(o.summary || "").matchAll(/(?:^|,\s)(.+?)\s×(\d+)(?=,\s|$)/g)]
+                    .map((m) => ({ name: m[1], qty: m[2] }));
+                  DHP.orderPopup({
+                    type: "cancelled",
+                    orderId: o.id || orderId,
+                    items: items.length ? items : [{ name: o.summary || "" }],
+                    onClose: () => location.reload()
+                  });
                 } else {
                   alert(data.error);
                 }

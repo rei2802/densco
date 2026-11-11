@@ -1093,3 +1093,22 @@ label.opt span{font-size:12px;color:var(--mute)}
     background:#fee2e2;
     color:#dc2626;
 }
+
+/* Order pop-ups (order placed / order cancelled) - built on .modal */
+.pop-box{max-width:420px;text-align:center;padding:32px 28px 26px;animation:popIn .18s ease-out}
+.pop-ico{width:60px;height:60px;border-radius:50%;display:grid;place-items:center;margin:0 auto 16px}
+.pop-ico svg{width:28px;height:28px}
+.pop-ico.ok{background:#DCFCE7;color:var(--ok)}
+.pop-ico.bad{background:var(--red-l);color:var(--red)}
+.pop-box h3{font-size:20px;font-weight:700}
+.pop-sub{margin-top:6px;font-size:14px;color:var(--mute)}
+.pop-det{margin:20px 0 22px;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.pop-row{display:flex;justify-content:space-between;align-items:baseline;gap:16px}
+.pop-lbl{font-size:12px;font-weight:600;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+.pop-val{font-weight:700;color:var(--ink)}
+.pop-sep{height:1px;background:var(--line);margin:12px 0}
+.pop-items{margin-top:6px;max-height:140px;overflow-y:auto}
+.pop-item{display:flex;justify-content:space-between;gap:16px;padding:3px 0;color:var(--ink);font-weight:500}
+.pop-item .muted{font-weight:600;white-space:nowrap}
+@keyframes popIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.pop-box{animation:none}}

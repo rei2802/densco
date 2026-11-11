@@ -162,6 +162,7 @@ while ($row = $res->fetch_assoc()) {
   <script src="js/store.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/chatbot.js"></script>
+  <script src="js/popup.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     const val = (n) => document.querySelector(`input[name=${n}]:checked`).value;
@@ -458,8 +459,12 @@ while ($row = $res->fetch_assoc()) {
         }
 
         DHP.saveCart([]);
-        alert("Order placed successfully!\nOrder ID: " + data.sorder_id);
-        location.href = "account.html";
+        DHP.orderPopup({
+          type: "placed",
+          orderId: data.order_id,
+          items: L.map((l) => ({ name: l.p.name, qty: l.qty })),
+          onClose: () => { location.href = "account.html"; }
+        });
       } catch (error) {
         console.error(error);
         err.textContent = "Something went wrong while placing the order.";
