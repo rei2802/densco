@@ -1116,4 +1116,7 @@ label.opt span{font-size:12px;color:var(--mute)}
 @keyframes popIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.pop-box{animation:none}}
 
-
+.soldout-section { margin-top: 40px; }
+.pcard.is-soldout .pthumb { opacity: .5; filter: grayscale(1); }
+.pcard.is-soldout .pname { color: #777; }
+.pcard.is-soldout .btn[disabled] { cursor: not-allowed; }

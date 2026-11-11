@@ -131,18 +131,6 @@ while ($row = $res->fetch_assoc()) {
             </p>
           </div>
 
-          <div class="field mt" id="refBox">
-            <label for="refNum">Payment reference number</label>
-            <input
-                  id="refNum"
-                  name="refNum"
-                  type="text"
-                  placeholder="Reference number, transaction ID, or confirmation code"
-                  maxlength="100"
-                  required>
-            <p class="muted sm" style="margin-top:6px">Enter the reference number from your receipt or deposit slip so staff can match it to your payment.</p>
-          </div>
-
         </div>
       </div>
 
@@ -162,7 +150,6 @@ while ($row = $res->fetch_assoc()) {
   <script src="js/store.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/chatbot.js"></script>
-  <script src="js/popup.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     const val = (n) => document.querySelector(`input[name=${n}]:checked`).value;
@@ -200,59 +187,6 @@ while ($row = $res->fetch_assoc()) {
       );
     }
 
-    // Reference number rules per payment method. Mirrors payment_lib.php, which
-    // is what checkout.php actually enforces. "max" is the most characters the
-    // field accepts. Spaces are ignored (GCash shows its reference as
-    // "1234 567 890123").
-    const REF_RULES = {
-      "GCash / QR PH": {
-        re: /^\d{12,13}$/,
-        numeric: true,
-        max: 13,
-        error: "GCash reference numbers are 12 or 13 digits (numbers only). Check your receipt."
-      },
-      "Bank Transfer": {
-        re: /^[A-Za-z0-9-]{6,30}$/,
-        numeric: false,
-        max: 30,
-        error: "Bank reference numbers must be 6 to 30 characters (letters, numbers or dashes only). Check your receipt or deposit slip."
-      }
-    };
-    const REF_DEFAULT = {
-      re: /^.{1,100}$/,
-      numeric: false,
-      max: 100,
-      error: "Enter your payment reference number."
-    };
-
-    function refRule(pay) {
-      return REF_RULES[pay] || REF_DEFAULT;
-    }
-
-    function normRef() {
-      return $("refNum").value.replace(/\s+/g, "");
-    }
-
-    // Keep the field within the selected method's limit (GCash: digits only,
-    // max 13). Spaces are removed first so a pasted "1234 567 890123" isn't
-    // cut short by a plain maxlength, which would count the spaces.
-    function limitRef() {
-      const rule = refRule(val("pay"));
-      const input = $("refNum");
-      let v = input.value.replace(/\s+/g, "");
-      if (rule.numeric) v = v.replace(/\D/g, "");
-      input.value = v.slice(0, rule.max);
-    }
-
-    function syncRefField(pay) {
-      const rule = refRule(pay);
-      const input = $("refNum");
-      input.inputMode = rule.numeric ? "numeric" : "text";
-      limitRef();
-    }
-
-    $("refNum").addEventListener("input", limitRef);
-
     function render() {
       const L = lines();
       const del = val("ful") === "delivery";
@@ -268,7 +202,6 @@ while ($row = $res->fetch_assoc()) {
       const paymentMethod = val("pay");
 
       $("proofBox").classList.toggle("hide", paymentMethod === "Cash");
-      $("refBox").classList.toggle("hide", paymentMethod === "Cash");
 
       $("paymentDetails").classList.toggle(
         "hide",
@@ -298,7 +231,6 @@ while ($row = $res->fetch_assoc()) {
         "hide",
         paymentMethod !== "Bank Transfer"
       );
-      syncRefField(paymentMethod);
       $("items").innerHTML = L.map(renderLine).join("");
 
       $("sum").innerHTML =
@@ -360,8 +292,6 @@ while ($row = $res->fetch_assoc()) {
       const pay = val("pay");
       const file = $("proof").files[0];
       const err = $("err");
-      const placeBtn = $("place");
-      const originalLabel = placeBtn.textContent;
 
       err.textContent = "";
 
@@ -370,26 +300,16 @@ while ($row = $res->fetch_assoc()) {
         return;
       }
 
-      if (!$("phone").value.trim()) {
-        err.textContent = "Enter a contact phone number.";
-        return;
+      const phone = $("phone").value.trim();
+
+      if (!/^09\d{9}$/.test(phone)) {
+          err.textContent = "Enter a valid 11-digit mobile number starting with 09.";
+          return;
       }
 
       if (pay !== "Cash" && !file) {
         err.textContent = "Upload your proof of payment for " + pay + ".";
         return;
-      }
-
-      if (pay !== "Cash") {
-        if (!normRef()) {
-          err.textContent = "Enter your payment reference number.";
-          return;
-        }
-
-        if (!refRule(pay).re.test(normRef())) {
-          err.textContent = refRule(pay).error;
-          return;
-        }
       }
 
       const sub = L.reduce((s, l) => s + l.p.price * l.qty, 0);
@@ -401,50 +321,18 @@ while ($row = $res->fetch_assoc()) {
         price: l.p.price
       }));
 
-      placeBtn.disabled = true;
+      const orderData = {
+        customer: DHP.user(),
+        total: total,
+        fulfillment: del ? "Delivery" : "Store Pickup",
+        address: del ? $("addr").value.trim() : "",
+        phone: $("phone").value.trim(),
+        payment: pay,
+        proof: file ? file.name : null,
+        items: items
+      };
 
       try {
-        // Proof files can't travel inside the JSON payload below, so when one
-        // was selected it's uploaded to Cloudinary first and we send its
-        // secure_url to checkout.php instead of the file itself.
-        let proofUrl = null;
-
-        if (file) {
-          placeBtn.textContent = "Uploading proof...";
-
-          const fd = new FormData();
-          fd.append("proof", file);
-
-          const uploadRes = await fetch("api/upload-proof.php", {
-            method: "POST",
-            credentials: "same-origin",
-            body: fd
-          });
-
-          const uploadData = await uploadRes.json();
-
-          if (!uploadData.success) {
-            err.textContent = uploadData.error || "Failed to upload proof of payment.";
-            return;
-          }
-
-          proofUrl = uploadData.url;
-        }
-
-        placeBtn.textContent = "Placing order...";
-
-        const orderData = {
-          customer: DHP.user(),
-          total: total,
-          fulfillment: del ? "Delivery" : "Store Pickup",
-          address: del ? $("addr").value.trim() : "",
-          phone: $("phone").value.trim(),
-          payment: pay,
-          proof: proofUrl,
-          reference_number: pay === "Cash" ? "" : normRef(),
-          items: items
-        };
-
         const response = await fetch("checkout.php", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -459,18 +347,11 @@ while ($row = $res->fetch_assoc()) {
         }
 
         DHP.saveCart([]);
-        DHP.orderPopup({
-          type: "placed",
-          orderId: data.order_id,
-          items: L.map((l) => ({ name: l.p.name, qty: l.qty })),
-          onClose: () => { location.href = "account.html"; }
-        });
+        alert("Order placed successfully!\nOrder ID: " + data.sorder_id);
+        location.href = "account.html";
       } catch (error) {
         console.error(error);
         err.textContent = "Something went wrong while placing the order.";
-      } finally {
-        placeBtn.disabled = false;
-        placeBtn.textContent = originalLabel;
       }
     };
 

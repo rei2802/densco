@@ -1,7 +1,6 @@
 <?php
 header("Content-Type: application/json");
 include "config.php";
-require_once "payment_lib.php";
 session_start();
 
 try {
@@ -20,7 +19,6 @@ try {
     $phone       = trim($data["phone"] ?? "");
     $payment     = $data["payment"] ?? "";
     $proof       = $data["proof"] ?? null;
-    $referenceNumber = normalize_reference_number($data["reference_number"] ?? "");
     $items       = $data["items"] ?? [];
 
     // Phone validation
@@ -30,21 +28,12 @@ try {
         );
     }
 
-    // Cash orders have no receipt, so they never carry a reference number
-    if ($payment === "Cash") {
-        $referenceNumber = "";
-    }
-
     // Basic validation
     if ($total <= 0) {
         throw new Exception("Invalid order total.");
     }
     if (empty($items)) {
         throw new Exception("Your cart is empty.");
-    }
-    $refError = reference_number_error($payment, $referenceNumber);
-    if ($refError !== null) {
-        throw new Exception($refError);
     }
 
     // The order belongs to the customer who is logged in (checked on the server)
@@ -99,10 +88,10 @@ try {
     // Insert order
     $stmt = $conn->prepare(
         "INSERT INTO orders
-        (user_id, total_amount, status, fulfillment, address, phone, payment_method, proof, reference_number)
-        VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?)"
+        (user_id, total_amount, status, fulfillment, address, phone, payment_method, proof)
+        VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)"
     );
-    $stmt->bind_param("idssssss", $user_id, $total, $fulfillment, $address, $phone, $payment, $proof, $referenceNumber);
+    $stmt->bind_param("idsssss", $user_id, $total, $fulfillment, $address, $phone, $payment, $proof);
     $stmt->execute();
 
     // Get newly created order ID

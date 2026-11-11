@@ -67,6 +67,12 @@ unset($p);
           <span class="muted" id="count" style="align-self:center"></span>
         </div>
         <div class="pgrid" id="grid"></div>
+                <div class="pgrid" id="grid"></div>
+
+        <section id="soldOutSection" class="soldout-section hide">
+          <h2 class="sec">Sold Out</h2>
+          <div class="pgrid" id="soldOutGrid"></div>
+        </section>
       </section>
     </div>
 
@@ -89,27 +95,31 @@ unset($p);
     function renderCategoryButton(c) {
       return `<button class="${c[0] === cat ? "on" : ""}" data-cat="${c[0]}"><span>${c[1]}</span><span>${c[2]}</span></button>`;
     }
-
-    function renderProductCard(p) {
-      const thumb = p.image
-        ? `<img src="${p.image}" alt="${DHP.esc(p.name)}" style="display:block;width:100%;height:100%;object-fit:cover">`
-        : "Product image";
-
-      return (
-        `<article class="pcard">` +
-          `<a class="pthumb" href="product.php?id=${p.id}" style="display:block;overflow:hidden;aspect-ratio:1/1">${thumb}</a>` +
-          `<div class="pbody">` +
-            `<div class="pcat">${p.cat}</div>` +
-            `<a class="pname" href="product.php?id=${p.id}">${DHP.esc(p.name)}</a>` +
-            `<div class="stock ${DHP.shopState(p)}">${DHP.shopStateLabel(p)}</div>` +
-            `<div class="pfoot">` +
-              `<span class="price">${DHP.peso(p.price)}</span>` +
-              `<button class="btn btn-red btn-sm" data-add="${p.id}" ${DHP.canOrder(p) ? "" : "disabled"}>Add to Cart</button>` +
-            `</div>` +
-          `</div>` +
-        `</article>`
-      );
+    function isSoldOut(p) {
+      return p.stock <= 0 || /out|sold/i.test(p.avail || "");
     }
+
+        function renderProductCard(p) {
+          const soldOut = isSoldOut(p);
+          const thumb = p.image
+            ? `<img src="${p.image}" alt="${DHP.esc(p.name)}" style="display:block;width:100%;height:100%;object-fit:cover">`
+            : "Product image";
+
+          return (
+            `<article class="pcard${soldOut ? " is-soldout" : ""}">` +
+              `<a class="pthumb" href="product.php?id=${p.id}" style="display:block;overflow:hidden;aspect-ratio:1/1">${thumb}</a>` +
+              `<div class="pbody">` +
+                `<div class="pcat">${p.cat}</div>` +
+                `<a class="pname" href="product.php?id=${p.id}">${DHP.esc(p.name)}</a>` +
+                `<div class="stock ${DHP.shopState(p)}">${soldOut ? "Sold Out" : DHP.shopStateLabel(p)}</div>` +
+                `<div class="pfoot">` +
+                  `<span class="price">${DHP.peso(p.price)}</span>` +
+                  `<button class="btn btn-red btn-sm" data-add="${p.id}" ${!soldOut && DHP.canOrder(p) ? "" : "disabled"}>${soldOut ? "Sold Out" : "Add to Cart"}</button>` +
+                `</div>` +
+              `</div>` +
+            `</article>`
+          );
+        }
 
     function renderBestSellers() {
       const bestSellers = DHP.bestSellers(8);
@@ -141,15 +151,23 @@ unset($p);
       );
       $("cats").innerHTML = cats.map(renderCategoryButton).join("");
 
-      const L = all.filter(
+            const matches = all.filter(
         (p) => (!cat || p.cat === cat) && p.name.toLowerCase().includes(term.toLowerCase())
       );
-      $("count").textContent = L.length + " product" + (L.length === 1 ? "" : "s");
+      const L = matches.filter((p) => !isSoldOut(p));
+      const S = matches.filter(isSoldOut);
+
+      $("count").textContent = L.length + " product" + (L.length === 1 ? "" : "s") +
+        (S.length ? " · " + S.length + " sold out" : "");
 
       $("grid").innerHTML = L.length
         ? L.map(renderProductCard).join("")
-        : '<div class="card empty" style="grid-column:1/-1">No products match your search. Try another name or category.</div>';
+        : matches.length
+          ? '<div class="card empty" style="grid-column:1/-1">Everything matching your search is currently sold out.</div>'
+          : '<div class="card empty" style="grid-column:1/-1">No products match your search. Try another name or category.</div>';
 
+      $("soldOutSection").classList.toggle("hide", !S.length);
+      $("soldOutGrid").innerHTML = S.map(renderProductCard).join("");
       renderBestSellers();
     }
 
@@ -168,6 +186,7 @@ unset($p);
 
     $("grid").addEventListener("click", handleAddToCart);
     $("bestSellersGrid").addEventListener("click", handleAddToCart);
+    $("soldOutGrid").addEventListener("click", handleAddToCart);
 
     render();
   </script>
