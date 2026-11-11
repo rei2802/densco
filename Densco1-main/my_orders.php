@@ -20,5 +20,8 @@ try {
     ]);
 } catch (Throwable $e) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Could not load your orders.']);
+    error_log('my_orders.php: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'error' => 'Could not load your orders.', 'detail' => $e->getMessage()]);
 }
+
+?>

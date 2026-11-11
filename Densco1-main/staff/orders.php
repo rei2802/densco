@@ -62,7 +62,8 @@ try {
         json_out(200, ['success' => true, 'orders' => fetch_orders($conn)]);
     }
 } catch (Throwable $e) {
-    if ($isApi) json_out(500, ['success' => false, 'error' => 'Server error.']);
+    error_log('staff/orders.php: ' . $e->getMessage());
+    if ($isApi) json_out(500, ['success' => false, 'error' => 'Server error.', 'detail' => $e->getMessage()]);
     http_response_code(500);
     echo 'Server error.';
     exit;

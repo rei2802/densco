@@ -179,13 +179,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $currentStock = $curRow ? (int)$curRow['stock_quantity'] : 0;
         $addStock = intval($data['add_stock'] ?? 0);
-
-        // Stock can never go below zero (e.g. a negative "add stock" bigger than what is on hand)
-        $stock = $currentStock + $addStock;
-        if ($stock < 0) {
-            echo json_encode(['success' => false, 'error' => 'Stock cannot go below 0. There are only ' . max(0, $currentStock) . ' units on hand.']);
+        // Add Stock only adds: negative numbers are not accepted.
+        if ($addStock < 0) {
+            echo json_encode(['success' => false, 'error' => 'Add Stock cannot be negative. Enter 0 or a positive number.']);
             exit;
         }
+
+        $stock = $currentStock + $addStock;
+
         $status = trim($data['status'] ?? '');
         if (!in_array($status, $ALLOWED_STATUSES, true)) {
             $status = $curRow ? $curRow['availability_status'] : 'in_stock';
@@ -589,7 +590,23 @@ while ($row = $res->fetch_assoc()) {
       }
     });
 
+    // Stock fields only take whole numbers from 0 up (no minus sign, no decimals)
+    ["eAddStock", "nStock"].forEach((id) => {
+      const el = $(id);
+      if (!el) return;
+      el.addEventListener("keydown", (e) => {
+        if (["-", "+", "e", "E", "."].includes(e.key)) e.preventDefault();
+      });
+      el.addEventListener("input", () => {
+        el.value = el.value.replace(/[^0-9]/g, "");
+      });
+    });
+
     $("saveBtn").onclick = async () => {
+      if ((+$("eAddStock").value || 0) < 0) {
+        DHP.toast("Add Stock cannot be negative");
+        return;
+      }
       const fd = new FormData();
       fd.append("action", "edit");
       fd.append("id", editing);

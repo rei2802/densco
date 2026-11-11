@@ -10,8 +10,19 @@ function order_ref($id) {
  * $userId = only that customer's orders (customer account page); null = all orders (staff).
  */
 function fetch_orders(mysqli $conn, $userId = null, $limit = null) {
-    $sql = "SELECT o.order_id, o.order_date, o.total_amount, o.status, o.fulfillment,
-                   o.address, o.phone, o.payment_method, o.proof, o.reference_number, u.full_name AS customer
+    // Only read optional columns that really exist in this database, so an older
+    // table (e.g. without reference_number) can't break the whole order list.
+    $have = [];
+    $cres = $conn->query("SHOW COLUMNS FROM orders");
+    while ($c = $cres->fetch_assoc()) {
+        $have[$c['Field']] = true;
+    }
+    $col = function ($name) use ($have) {
+        return isset($have[$name]) ? "o.$name" : "NULL AS $name";
+    };
+
+    $sql = "SELECT o.order_id, " . $col('order_date') . ", o.total_amount, o.status, " . $col('fulfillment') . ",
+                   " . $col('address') . ", " . $col('phone') . ", " . $col('payment_method') . ", " . $col('proof') . ", " . $col('reference_number') . ", u.full_name AS customer
             FROM orders o
             LEFT JOIN users u ON u.user_id = o.user_id";
     if ($userId !== null) {
@@ -29,7 +40,7 @@ function fetch_orders(mysqli $conn, $userId = null, $limit = null) {
     $manila = new DateTimeZone('Asia/Manila');
 
     while ($r = $res->fetch_assoc()) {
-        $dt = new DateTime($r['order_date'], $utc);
+        $dt = new DateTime($r['order_date'] ?: 'now', $utc);
         $dt->setTimezone($manila);
         $orders[(int)$r['order_id']] = [
             'oid'         => (int)$r['order_id'],
@@ -153,3 +164,5 @@ function change_order_status(mysqli $conn, $orderId, $newStatus, $userId = null)
         return ['ok' => false, 'error' => 'Could not update the order. Please try again.', 'code' => 500];
     }
 }
+
+?>
