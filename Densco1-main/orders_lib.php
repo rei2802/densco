@@ -11,7 +11,7 @@ function order_ref($id) {
  */
 function fetch_orders(mysqli $conn, $userId = null, $limit = null) {
     $sql = "SELECT o.order_id, o.order_date, o.total_amount, o.status, o.fulfillment,
-                   o.address, o.phone, o.payment_method, o.proof, u.full_name AS customer
+                   o.address, o.phone, o.payment_method, o.proof, o.reference_number, u.full_name AS customer
             FROM orders o
             LEFT JOIN users u ON u.user_id = o.user_id";
     if ($userId !== null) {
@@ -44,6 +44,7 @@ function fetch_orders(mysqli $conn, $userId = null, $limit = null) {
             'phone'       => $r['phone'] ?? '',
             'payment'     => $r['payment_method'] ?? '',
             'proof'       => $r['proof'],
+            'reference_number' => $r['reference_number'] ?? '',
             'status'      => $r['status'] ?: 'pending',
         ];
     }

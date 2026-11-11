@@ -25,14 +25,28 @@
     <div id="orders"></div>
   </main>
 
+  <div class="modal" id="receiptModal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="receiptTitle">Payment receipt</h3>
+        <button class="modal-x" data-close aria-label="Close">&times;</button>
+      </div>
+      <div class="proof" id="receiptBody" style="height:auto;min-height:200px;overflow:hidden"></div>
+      <div id="receiptRef" class="mt"></div>
+      <button class="btn btn-line mt" data-close>Close</button>
+    </div>
+  </div>
+
   <footer class="ftr" id="siteFooter"></footer>
 
   <script src="js/store.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/chatbot.js"></script>
+  <script src="js/popup.js"></script>
   <script>
     const me = DHP.user();
     document.getElementById("who").textContent = me;
+    let ORDERS = [];
 
     function trackSteps(o) {
       return [
@@ -58,6 +72,11 @@
           <div class="card order">
             <h3>${DHP.esc(o.id)}</h3>
             <span class="badge cancelled">Cancelled</span>
+            <div class="mt">
+              ${o.proof
+                ? `<button class="btn btn-line view-receipt" data-receipt="${o.oid}">View receipt</button>`
+                : `<button class="btn btn-line" disabled title="No payment proof uploaded for this order">View receipt</button>`}
+            </div>
           </div>
         `;
       }
@@ -79,19 +98,72 @@
           `<p class="mt">${DHP.esc(o.summary)}</p>` +
           `<div class="track">${renderTrack(steps, cur, o.status)}</div>` +
 
-          (o.status === "pending"
-            ? `<div class="mt">
-                <button class="btn btn-red cancel-order" data-id="${o.oid}">
+          `<div class="mt" style="display:flex;gap:10px;flex-wrap:wrap">` +
+            (o.proof
+              ? `<button class="btn btn-line view-receipt" data-receipt="${o.oid}">View receipt</button>`
+              : `<button class="btn btn-line" disabled title="No payment proof uploaded for this order">View receipt</button>`) +
+            (o.status === "pending"
+              ? `<button class="btn btn-red cancel-order" data-id="${o.oid}">
                   Cancel Order
-                </button>
-              </div>`
-            : "") +
+                </button>`
+              : "") +
+          `</div>` +
 
           `</div>`
       );
     }
 
+    const receiptModal = document.getElementById("receiptModal");
+
+    function openReceipt(o) {
+      document.getElementById("receiptTitle").textContent = "Payment receipt, " + o.id;
+
+      // proof is a Cloudinary URL. Most uploads are images, but checkout also
+      // accepts PDFs, which can't render in an <img>.
+      const body = document.getElementById("receiptBody");
+      body.innerHTML = "";
+      const link = document.createElement("a");
+      link.href = o.proof;
+      link.target = "_blank";
+      link.rel = "noopener";
+      if (/\.pdf(\?|$)/i.test(o.proof)) {
+        link.textContent = "Open the uploaded PDF";
+      } else {
+        const img = document.createElement("img");
+        img.src = o.proof;
+        img.alt = "Payment receipt";
+        img.style.cssText = "display:block;max-width:100%;max-height:60vh;object-fit:contain";
+        img.onerror = () => { link.textContent = "Could not load the image. Open it in a new tab."; };
+        link.appendChild(img);
+      }
+      body.appendChild(link);
+
+      const ref = document.getElementById("receiptRef");
+      ref.innerHTML = o.reference_number
+        ? `<span class="muted sm">Reference number</span><br><b>${DHP.esc(o.reference_number)}</b>`
+        : "";
+
+      receiptModal.classList.add("open");
+    }
+
+    function closeReceipt() {
+      receiptModal.classList.remove("open");
+    }
+
+    receiptModal.addEventListener("click", (e) => {
+      if (e.target === receiptModal || e.target.closest("[data-close]")) closeReceipt();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeReceipt();
+    });
+
     const box = document.getElementById("orders");
+    box.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-receipt]");
+      if (!b) return;
+      const o = ORDERS.find((x) => String(x.oid) === b.dataset.receipt);
+      if (o && o.proof) openReceipt(o);
+    });
     box.innerHTML = '<div class="card empty">Loading your orders...</div>';
 
     fetch("my_orders.php", { credentials: "same-origin" })
@@ -107,6 +179,7 @@
       .then((d) => {
         if (!d) return;
         if (!d.success) throw new Error(d.error);
+        ORDERS = d.orders;
         box.innerHTML = d.orders.length
           ? d.orders.map(renderOrder).join("")
           : '<div class="card empty">You haven\'t placed an order yet. <a href="catalog.php">Browse the shop</a></div>';
@@ -116,22 +189,36 @@
               const orderId = btn.dataset.id;
               console.log("Order ID being sent:", orderId);
 
-              if (!confirm("Cancel this order?")) return;
+              const o = ORDERS.find((x) => String(x.oid) === String(orderId)) || {};
+              // summary looks like "Product A ×1, Product B ×2"
+              const items = [...(o.summary || "").matchAll(/(?:^|,\s)(.+?)\s×(\d+)(?=,\s|$)/g)]
+                .map((m) => ({ name: m[1], qty: m[2] }));
+              const shownItems = items.length ? items : [{ name: o.summary || "" }];
 
-              fetch("cancel_order.php", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/x-www-form-urlencoded"
-                },
-                body: `order_id=${encodeURIComponent(orderId)}`
-              })
-              .then(r => r.json())
-              .then(data => {
-                if (data.success) {
-                  alert("Order cancelled.");
-                  location.reload();
-                } else {
-                  alert(data.error);
+              DHP.confirmCancelPopup({
+                orderId: o.id || orderId,
+                items: shownItems,
+                onConfirm: () => {
+                  fetch("cancel_order.php", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    body: `order_id=${encodeURIComponent(orderId)}`
+                  })
+                  .then(r => r.json())
+                  .then(data => {
+                    if (data.success) {
+                      DHP.orderPopup({
+                        type: "cancelled",
+                        orderId: o.id || orderId,
+                        items: shownItems,
+                        onClose: () => location.reload()
+                      });
+                    } else {
+                      alert(data.error);
+                    }
+                  });
                 }
               });
             });

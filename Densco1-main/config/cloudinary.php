@@ -14,6 +14,3 @@ Configuration::instance([
         'secure' => true
     ]
 ]);
-
-
-?>

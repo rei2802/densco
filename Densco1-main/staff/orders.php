@@ -132,6 +132,7 @@ try {
                 <th>Fulfillment</th>
                 <th>Payment</th>
                 <th>Proof</th>
+                <th>Reference #</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -205,6 +206,7 @@ try {
         `<td>${fulfillCell}</td>` +
         `<td>${DHP.esc(o.payment)}</td>` +
         `<td>${proofCell}</td>` +
+        `<td>${o.reference_number ? DHP.esc(o.reference_number) : '<span class="muted sm">N/A</span>'}</td>` +
         `<td>${statusSelect}</td>` +
         `</tr>`
       );
@@ -212,7 +214,7 @@ try {
 
     function render() {
       if (!loaded) {
-        $("rows").innerHTML = '<tr><td colspan="9"><div class="empty">Loading orders...</div></td></tr>';
+        $("rows").innerHTML = '<tr><td colspan="10"><div class="empty">Loading orders...</div></td></tr>';
         return;
       }
       const t = term.toLowerCase();
@@ -222,7 +224,7 @@ try {
 
       $("rows").innerHTML = O.length
         ? O.map(renderRow).join("")
-        : '<tr><td colspan="9"><div class="empty">' +
+        : '<tr><td colspan="10"><div class="empty">' +
           (ORDERS.length ? "No orders match your search." : "No orders yet.") +
           "</div></td></tr>";
     }
@@ -245,7 +247,7 @@ try {
         })
         .catch((err) => {
           $("rows").innerHTML =
-            '<tr><td colspan="9"><div class="empty">Could not load orders. Please refresh.</div></td></tr>';
+            '<tr><td colspan="10"><div class="empty">Could not load orders. Please refresh.</div></td></tr>';
         });
     }
 
@@ -261,8 +263,17 @@ try {
       const o = ORDERS.find((x) => String(x.oid) === b.dataset.proof);
       if (!o) return;
       $("proofTitle").textContent = "Payment proof, " + o.id;
-      $("proofBody").innerHTML =
-        `<div><strong>Uploaded file</strong><p class="muted sm mt">${DHP.esc(o.proof)}</p></div>`;
+
+      // proof is now a Cloudinary secure_url. Most uploads are images, but
+      // cart.php's #proof input also accepts PDFs, which can't render in an <img>.
+      const isPdf = /\.pdf(\?|$)/i.test(o.proof || "");
+
+      $("proofBody").innerHTML = isPdf
+        ? `<a href="${DHP.esc(o.proof)}" target="_blank" rel="noopener">Open the uploaded PDF</a>`
+        : `<a href="${DHP.esc(o.proof)}" target="_blank" rel="noopener">` +
+            `<img src="${DHP.esc(o.proof)}" alt="Payment proof" style="width:100%;height:100%;object-fit:contain;border-radius:inherit">` +
+          `</a>`;
+
       $("proofModal").classList.add("open");
     });
 
