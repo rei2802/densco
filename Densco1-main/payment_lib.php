@@ -15,12 +15,12 @@ function normalize_reference_number($ref) {
  * Returns an error message if $ref is not a valid reference number for the
  * given payment method, or null when it is valid. Pass the normalized value.
  *
- *  - "GCash / QR PH": 12 or 13 digits (GCash Send Money is 12-13; GCash bank
- *    transfer is 13).
- *  - "Bank Transfer": BDO/BPI/QRPH formats vary by transaction type, so a
- *    lenient check: 6-30 letters, numbers or dashes.
+ *  - "GCash / QR PH": 12 or 13 characters, letters and numbers only
+ *    (GCash shows 13-digit numbers, but some receipts include letters).
  *  - "Cash": no reference number (there is no receipt), always valid.
  *  - anything else: required, up to 100 characters.
+ *
+ * Bank transfer is no longer offered at checkout (long validation process).
  */
 function reference_number_error($payment, $ref) {
     $ref = (string)$ref;
@@ -30,19 +30,13 @@ function reference_number_error($payment, $ref) {
     }
 
     if ($ref === '') {
-        return 'Payment reference number is required.';
+        return 'Enter the payment reference number from your receipt.';
     }
 
     switch ($payment) {
         case 'GCash / QR PH':
-            if (!preg_match('/^\d{12,13}$/', $ref)) {
-                return 'GCash reference numbers are 12 or 13 digits (numbers only). Check your receipt.';
-            }
-            return null;
-
-        case 'Bank Transfer':
-            if (!preg_match('/^[A-Za-z0-9-]{6,30}$/', $ref)) {
-                return 'Bank reference numbers must be 6 to 30 characters (letters, numbers or dashes only). Check your receipt or deposit slip.';
+            if (!preg_match('/^[A-Za-z0-9]{12,13}$/', $ref)) {
+                return 'The reference number must be 12 or 13 characters (letters and numbers only). Check your GCash receipt.';
             }
             return null;
 

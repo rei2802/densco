@@ -81,7 +81,6 @@ unset($p);
           <span class="muted" id="count" style="align-self:center"></span>
         </div>
         <div class="pgrid" id="grid"></div>
-                <div class="pgrid" id="grid"></div>
 
         <section id="soldOutSection" class="soldout-section hide">
           <h2 class="sec">Sold Out</h2>

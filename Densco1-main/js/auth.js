@@ -83,6 +83,70 @@
     });
 
   // ---------------------------------------------------------------------
+  // Session expired: show a pop-up and log the customer out automatically.
+  // Used when the server says the PHP session ended (HTTP 401 /
+  // session_expired) and by the background session check below.
+  // ---------------------------------------------------------------------
+  D.sessionExpired = function () {
+    if (document.getElementById("sessionExpiredModal")) return;
+    D.logout(); // automatic log out: the customer is no longer signed in on this browser
+
+    var next = page + location.search;
+    var loginUrl =
+      "login.php" +
+      (/^[a-z-]+\.(html|php)(\?.*)?$/.test(next) && page !== "login.php"
+        ? "?next=" + encodeURIComponent(next)
+        : "");
+
+    var el = document.createElement("div");
+    el.id = "sessionExpiredModal";
+    el.className = "modal open";
+    el.setAttribute("role", "alertdialog");
+    el.setAttribute("aria-modal", "true");
+    el.setAttribute("aria-labelledby", "sessionExpiredTitle");
+    el.innerHTML =
+      '<div class="modal-box pop-box">' +
+      '<div class="pop-ico warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v6.5M12 17.2h.01"/></svg></div>' +
+      '<h3 id="sessionExpiredTitle">Session expired</h3>' +
+      '<p class="pop-sub">For your security you have been logged out automatically. Please log in again to continue.</p>' +
+      '<div class="pop-acts"><button class="btn btn-red" type="button" id="sessionExpiredBtn">Log in again</button></div>' +
+      "</div>";
+    document.body.appendChild(el);
+    var btn = document.getElementById("sessionExpiredBtn");
+    btn.addEventListener("click", function () {
+      location.href = loginUrl;
+    });
+    btn.focus();
+  };
+
+  // Asks the server if the session is still alive (session_check.php does not
+  // extend the session). Runs when a page opens, when the tab becomes visible
+  // again and once a minute.
+  var AUTH_PAGES = ["login.php", "register.php", "forgot_password.php", "reset_password.php"];
+  if (user && AUTH_PAGES.indexOf(page) === -1) {
+    var checking = false;
+    D.checkSession = function () {
+      if (checking || !D.user()) return;
+      checking = true;
+      fetch("session_check.php", { credentials: "same-origin", cache: "no-store" })
+        .then(function (r) {
+          if (r.status === 401) D.sessionExpired();
+        })
+        .catch(function () {
+          /* offline or server hiccup: don't log anyone out for that */
+        })
+        .then(function () {
+          checking = false;
+        });
+    };
+    D.checkSession();
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) D.checkSession();
+    });
+    setInterval(D.checkSession, 60000);
+  }
+
+  // ---------------------------------------------------------------------
   // Shared form helpers (login, register, forgot / reset password)
   // ---------------------------------------------------------------------
   var EYE =

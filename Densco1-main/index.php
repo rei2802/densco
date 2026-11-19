@@ -182,7 +182,7 @@ unset($p);
         ["Contact us", contactHtml],
         [
           "Ordering",
-          "<p>Store pickup or delivery. Pay by GCash / QR PH, bank transfer or cash.</p>",
+          "<p>Store pickup or delivery. Pay by GCash / QR PH or cash.</p>",
         ],
       ]
         .map((i) => `<div><h4>${i[0]}</h4>${i[1]}</div>`)

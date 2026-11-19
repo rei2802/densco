@@ -83,7 +83,7 @@ while ($row = $res->fetch_assoc()) {
             `<button class="btn btn-red btn-lg" id="now" ${DHP.canOrder(p) ? "" : "disabled"}>Order Now</button>` +
             `<button class="btn btn-line btn-lg" id="add" ${DHP.canOrder(p) ? "" : "disabled"}>Add to Cart</button>` +
           `</div>` +
-          `<p class="muted sm mt">Pickup at our Quezon City warehouse or delivery in Metro Manila (1 to 2 days). Pay by GCash / QR PH, bank transfer or cash.</p>` +
+          `<p class="muted sm mt">Pickup at our Quezon City warehouse or delivery in Metro Manila (1 to 2 days). Pay by GCash / QR PH or cash.</p>` +
         `</div>`;
 
       const qEl = document.getElementById("q"),

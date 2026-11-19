@@ -6,10 +6,38 @@ function order_ref($id) {
 }
 
 /**
+ * Makes sure the optional order columns used for cancel reasons and tracking
+ * exist (older databases don't have them yet). Must be called BEFORE a
+ * transaction starts, because ALTER TABLE commits implicitly.
+ */
+function ensure_order_columns(mysqli $conn) {
+    static $done = false;
+    if ($done) return;
+    $have = [];
+    $cres = $conn->query("SHOW COLUMNS FROM orders");
+    while ($c = $cres->fetch_assoc()) {
+        $have[$c['Field']] = true;
+    }
+    try {
+        if (!isset($have['cancel_reason'])) {
+            $conn->query("ALTER TABLE orders ADD COLUMN cancel_reason VARCHAR(500) NULL");
+        }
+        if (!isset($have['status_updated_at'])) {
+            $conn->query("ALTER TABLE orders ADD COLUMN status_updated_at DATETIME NULL");
+        }
+    } catch (Throwable $e) {
+        error_log('ensure_order_columns: ' . $e->getMessage());
+    }
+    $done = true;
+}
+
+/**
  * Returns orders (newest first) in the shape the website pages expect.
  * $userId = only that customer's orders (customer account page); null = all orders (staff).
  */
 function fetch_orders(mysqli $conn, $userId = null, $limit = null) {
+    ensure_order_columns($conn);
+
     // Only read optional columns that really exist in this database, so an older
     // table (e.g. without reference_number) can't break the whole order list.
     $have = [];
@@ -22,7 +50,7 @@ function fetch_orders(mysqli $conn, $userId = null, $limit = null) {
     };
 
     $sql = "SELECT o.order_id, " . $col('order_date') . ", o.total_amount, o.status, " . $col('fulfillment') . ",
-                   " . $col('address') . ", " . $col('phone') . ", " . $col('payment_method') . ", " . $col('proof') . ", " . $col('reference_number') . ", u.full_name AS customer
+                   " . $col('address') . ", " . $col('phone') . ", " . $col('payment_method') . ", " . $col('proof') . ", " . $col('reference_number') . ", " . $col('cancel_reason') . ", " . $col('status_updated_at') . ", u.full_name AS customer
             FROM orders o
             LEFT JOIN users u ON u.user_id = o.user_id";
     if ($userId !== null) {
@@ -42,6 +70,12 @@ function fetch_orders(mysqli $conn, $userId = null, $limit = null) {
     while ($r = $res->fetch_assoc()) {
         $dt = new DateTime($r['order_date'] ?: 'now', $utc);
         $dt->setTimezone($manila);
+        $updated = '';
+        if (!empty($r['status_updated_at'])) {
+            $ud = new DateTime($r['status_updated_at'], $utc);
+            $ud->setTimezone($manila);
+            $updated = $ud->format('M j, Y g:i A');
+        }
         $orders[(int)$r['order_id']] = [
             'oid'         => (int)$r['order_id'],
             'id'          => order_ref($r['order_id']),
@@ -57,13 +91,18 @@ function fetch_orders(mysqli $conn, $userId = null, $limit = null) {
             'proof'       => $r['proof'],
             'reference_number' => $r['reference_number'] ?? '',
             'status'      => $r['status'] ?: 'pending',
+            'cancel_reason' => $r['cancel_reason'] ?? '',
+            'updated'     => $updated,
+            'lines'       => [],
+            'subtotal'    => 0.0,
+            'delivery_fee' => 0.0,
         ];
     }
 
     if ($orders) {
         $in = implode(',', array_map('intval', array_keys($orders)));
         $ires = $conn->query(
-            "SELECT oi.order_id, oi.quantity, p.product_name
+            "SELECT oi.order_id, oi.quantity, oi.price, p.product_name
              FROM order_items oi
              LEFT JOIN products p ON p.product_id = oi.product_id
              WHERE oi.order_id IN ($in)
@@ -75,9 +114,19 @@ function fetch_orders(mysqli $conn, $userId = null, $limit = null) {
             $name = $i['product_name'] ?? 'Removed product';
             $parts[$oid][] = $name . ' ×' . (int)$i['quantity'];
             $orders[$oid]['items'] += (int)$i['quantity'];
+            $orders[$oid]['lines'][] = [
+                'name'  => $name,
+                'qty'   => (int)$i['quantity'],
+                'price' => (float)$i['price'],
+            ];
+            $orders[$oid]['subtotal'] += (float)$i['price'] * (int)$i['quantity'];
         }
         foreach ($parts as $oid => $list) {
             $orders[$oid]['summary'] = implode(', ', $list);
+        }
+        // Whatever the total holds beyond the items is the delivery fee.
+        foreach ($orders as $oid => $o) {
+            $orders[$oid]['delivery_fee'] = max(0.0, round($o['total'] - $o['subtotal'], 2));
         }
     }
 
@@ -95,14 +144,17 @@ function fetch_orders(mysqli $conn, $userId = null, $limit = null) {
  *  - Cancelling returns every item's quantity to products.stock_quantity, once.
  *
  * $userId: when set, the order must belong to that customer.
+ * $reason: optional text saved with a cancellation (the customer's reason).
  * Returns ['ok' => bool, 'error' => string|null, 'code' => int HTTP-style].
  */
-function change_order_status(mysqli $conn, $orderId, $newStatus, $userId = null) {
+function change_order_status(mysqli $conn, $orderId, $newStatus, $userId = null, $reason = null) {
     $allowed = ['pending', 'confirmed', 'shipped', 'completed', 'cancelled'];
     $orderId = (int)$orderId;
     if ($orderId <= 0 || !in_array($newStatus, $allowed, true)) {
         return ['ok' => false, 'error' => 'Invalid order or status.', 'code' => 400];
     }
+
+    ensure_order_columns($conn);
 
     $conn->begin_transaction();
     try {
@@ -132,8 +184,14 @@ function change_order_status(mysqli $conn, $orderId, $newStatus, $userId = null)
             return ['ok' => false, 'error' => 'Only pending orders can be cancelled. This order is already ' . $current . '.', 'code' => 400];
         }
 
-        $upd = $conn->prepare("UPDATE orders SET status = ? WHERE order_id = ?");
-        $upd->bind_param("si", $newStatus, $orderId);
+        if ($newStatus === 'cancelled') {
+            $reasonText = $reason !== null ? mb_substr(trim((string)$reason), 0, 500) : null;
+            $upd = $conn->prepare("UPDATE orders SET status = ?, status_updated_at = UTC_TIMESTAMP(), cancel_reason = ? WHERE order_id = ?");
+            $upd->bind_param("ssi", $newStatus, $reasonText, $orderId);
+        } else {
+            $upd = $conn->prepare("UPDATE orders SET status = ?, status_updated_at = UTC_TIMESTAMP() WHERE order_id = ?");
+            $upd->bind_param("si", $newStatus, $orderId);
+        }
         $upd->execute();
         $upd->close();
 

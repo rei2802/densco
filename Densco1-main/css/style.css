@@ -1162,3 +1162,53 @@ label.opt span{font-size:12px;color:var(--mute)}
 .qty-msg:empty{display:none}
 .qty input{text-align:center}
 .biz-links a{font-weight:600}
+
+/* ---- Checkout QR payment ---- */
+.qr-pay{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.qr-img{display:block;width:220px;height:220px;max-width:100%;object-fit:contain;border:1px solid var(--line);border-radius:12px;background:#fff;padding:8px}
+.qr-pay input[readonly]{width:auto;max-width:190px}
+
+/* ---- My Account: filter, pagination, selection, cancel reasons, receipt ---- */
+.ord-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.ord-tools input[type=search]{max-width:260px}
+.ord-filters{display:flex;gap:8px;flex-wrap:wrap}
+.ord-filters button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer}
+.ord-filters button:hover{border-color:var(--ink)}
+.ord-filters button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.ord-filters button .n{opacity:.7;font-weight:500;margin-left:4px}
+.bulk-bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13.5px}
+.bulk-bar label{display:flex;align-items:center;gap:8px;cursor:pointer}
+.order-top .sel{display:flex;gap:12px;align-items:flex-start}
+.order-top .sel input[type=checkbox]{width:18px;height:18px;margin-top:3px;accent-color:var(--red);cursor:pointer}
+.trk-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:16px;font-size:13px}
+.trk-head b{font-size:13.5px}
+.trk-note{font-size:13px;color:var(--mute);margin:8px 0 0}
+.cancel-note{margin-top:12px;font-size:13.5px;color:#991B1B;background:#FEF2F2;border-radius:8px;padding:8px 12px}
+.pager{display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:center;margin:20px 0 4px}
+.pager button{min-width:38px;height:38px;border:1px solid var(--line);background:#fff;border-radius:8px;font-weight:600;cursor:pointer;color:var(--ink)}
+.pager button:hover:not(:disabled){border-color:var(--ink)}
+.pager button.on{background:var(--red);border-color:var(--red);color:#fff}
+.pager button:disabled{opacity:.45;cursor:not-allowed}
+.pager-info{text-align:center;font-size:13px;color:var(--mute)}
+.reason-list{display:grid;gap:8px;margin:14px 0 10px;text-align:left}
+.reason-list label{display:flex;gap:10px;align-items:center;font-size:14px;cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.reason-list label:hover{border-color:var(--ink)}
+.reason-list input{accent-color:var(--red);width:17px;height:17px}
+.cancel-box textarea{width:100%;margin-top:4px}
+.cancel-box .pop-items{max-height:120px;overflow:auto}
+.rcpt{font-size:14px}
+.rcpt-head{text-align:center;border-bottom:2px dashed var(--line);padding-bottom:14px;margin-bottom:14px}
+.rcpt-head b{font-size:18px}
+.rcpt-row{display:flex;justify-content:space-between;gap:14px;padding:3px 0}
+.rcpt-row.total{border-top:2px solid var(--ink);margin-top:8px;padding-top:10px;font-weight:700;font-size:16px}
+.rcpt table{width:100%;border-collapse:collapse;margin:10px 0}
+.rcpt th{text-align:left;font-size:12px;color:var(--mute);font-weight:600;border-bottom:1px solid var(--line);padding:6px 0}
+.rcpt td{padding:6px 0;vertical-align:top}
+.rcpt .r{text-align:right;white-space:nowrap}
+.rcpt-foot{text-align:center;color:var(--mute);font-size:12.5px;margin-top:14px}
+@media print{
+  body.printing-receipt > *:not(#receiptModal){display:none!important}
+  body.printing-receipt #receiptModal{position:static;background:#fff;padding:0;display:block}
+  body.printing-receipt #receiptModal .modal-box{box-shadow:none;max-width:none;max-height:none;overflow:visible;padding:0}
+  body.printing-receipt .no-print{display:none!important}
+}

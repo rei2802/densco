@@ -88,7 +88,7 @@
         "Business hours: " + biz.hours + ". " +
         "Address: " + biz.address + ".\n" +
         "Delivery: Metro Manila delivery takes 1 to 2 days. Free store pickup is available at the Quezon City warehouse.\n" +
-        "Payment: GCash / QR PH, bank transfer and cash. GCash and bank transfer orders need proof of payment uploaded at checkout.\n" +
+        "Payment: GCash / QR PH and cash. GCash orders need the payment reference number entered at checkout.\n" +
         "Warranty: Most items carry a 1-year manufacturer warranty. For returns or replacements, customers message Densco on Viber or Messenger.\n" +
         "Customer account: " +
         (isLoggedIn()
@@ -121,7 +121,7 @@
     ],
     [
       /payment|pay|gcash|bank|proof|cash/,
-      "We accept GCash / QR PH, bank transfer and cash. For GCash and bank transfer payments, please upload your proof of payment during checkout."
+      "We accept GCash / QR PH and cash. For GCash, scan the QR code at checkout and enter the 12 to 13 character reference number from your receipt."
     ],
     [
       /order|status|track/,

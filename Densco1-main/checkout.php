@@ -13,6 +13,19 @@ try {
         exit;
     }
 
+    // The order belongs to the customer who is logged in (checked on the server).
+    // Checked first so an expired session is reported before anything else.
+    $user_id = (int)($_SESSION["user_id"] ?? 0);
+    if ($user_id <= 0) {
+        http_response_code(401);
+        echo json_encode([
+            "success" => false,
+            "session_expired" => true,
+            "error" => "Your session expired. Please log in again, then place your order."
+        ]);
+        exit;
+    }
+
     $customer    = trim($data["customer"] ?? "");
     $total       = floatval($data["total"] ?? 0);
     $fulfillment = $data["fulfillment"] ?? "";
@@ -38,11 +51,12 @@ try {
         throw new Exception("Your cart is empty.");
     }
 
-    // Payment proof + reference number rules (Cash needs neither)
+    // Payment methods: GCash / QR PH (needs a reference number) or Cash.
+    // Bank transfer is no longer accepted (too slow to verify).
+    if (!in_array($payment, ["GCash / QR PH", "Cash"], true)) {
+        throw new Exception("Choose GCash / QR PH or Cash as your payment method.");
+    }
     if ($payment !== "Cash") {
-        if (empty($proof)) {
-            throw new Exception("Upload your proof of payment for " . $payment . ".");
-        }
         $refError = reference_number_error($payment, $reference);
         if ($refError !== null) {
             throw new Exception($refError);
@@ -50,12 +64,8 @@ try {
     } else {
         $reference = "";
     }
-
-    // The order belongs to the customer who is logged in (checked on the server)
-    $user_id = (int)($_SESSION["user_id"] ?? 0);
-    if ($user_id <= 0) {
-        throw new Exception("Your session expired. Please log out, log in again, then place your order.");
-    }
+    // Staff verify the payment by its reference number; no proof file is uploaded.
+    $proof = null;
 
     $stmt = $conn->prepare("SELECT user_id FROM users WHERE user_id = ? LIMIT 1");
     $stmt->bind_param("i", $user_id);

@@ -94,51 +94,37 @@ while ($row = $res->fetch_assoc()) {
               <span>Digital payment</span>
             </label>
             <label class="opt">
-              <input type="radio" name="pay" value="Bank Transfer">
-              <b>Bank transfer</b>
-              <span>BDO or BPI deposit</span>
-            </label>
-            <label class="opt">
               <input type="radio" name="pay" value="Cash">
               <b>Cash</b>
               <span>On pickup or delivery</span>
             </label>
           </div>
 
-          <div class="field mt" id="proofBox">
-            <label for="proof">Proof of payment</label>
-            <input type="file" id="proof" accept="image/*,.pdf">
-            <p class="muted sm" style="margin-top:6px">Upload a screenshot or photo of your receipt or deposit slip. Staff verify it before confirming your order.</p>
-          </div>
-          <div class="field mt" id="refBox">
-            <label for="ref">Payment reference number</label>
-            <input id="ref" type="text" maxlength="40" autocomplete="off" placeholder="From your GCash / bank receipt">
-            <p class="muted sm" id="refHint" style="margin-top:6px"></p>
-          </div>
           <div class="card mt hide" id="paymentDetails">
             <h3>Payment Instructions</h3>
+            <p class="muted sm" style="margin-top:-4px">Scan the QR code with GCash (or any QR Ph app), send the exact total, then enter the reference number from your receipt below.</p>
 
-            <div id="gcashDetails">
-              <p><strong>GCash / QR PH</strong></p>
-              <p>Account Name: <strong>MITZ S.</strong></p>
-              <p>
-                Mobile Number:
-                <input type="text" value="09512517273" readonly>
-              </p>
+            <div id="gcashDetails" class="qr-pay">
+              <img id="gcashQr" class="qr-img" src="assets/gcash-qr.png" alt="Densco GCash / QR PH code" width="220" height="220"
+                   onerror="this.classList.add('hide'); document.getElementById('qrMissing').classList.remove('hide');">
+              <p class="muted sm hide" id="qrMissing">QR code isn't available right now. Send your payment to the GCash number below.</p>
+              <div>
+                <p><strong>GCash / QR PH</strong></p>
+                <p>Account Name: <strong>MITZ S.</strong></p>
+                <p>
+                  Mobile Number:
+                  <input type="text" value="09512517273" readonly>
+                </p>
+              </div>
             </div>
+          </div>
 
-            <div id="bankDetails" class="hide">
-              <p><strong>BDO Bank Transfer</strong></p>
-              <p>Account Name: <strong>DENSCO INC</strong></p>
-              <p>
-                Account Number:
-                <input type="text" value="000708024363" readonly>
-              </p>
-            </div>
-
-            <p class="muted sm mt">
-              After sending your payment, upload your proof of payment before placing the order.
-            </p>
+          <div class="field mt" id="refBox">
+            <label for="ref">Payment reference number</label>
+            <input id="ref" type="text" maxlength="13" autocomplete="off" autocapitalize="characters"
+                   placeholder="12 to 13 characters from your GCash receipt"
+                   oninput="this.value = this.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 13)">
+            <p class="muted sm" id="refHint" style="margin-top:6px"></p>
           </div>
 
         </div>
@@ -167,9 +153,9 @@ while ($row = $res->fetch_assoc()) {
     const FEE = DHP.settings().deliveryFee;
 
     // Mirrors payment_lib.php (the server re-checks these). Keep the two in sync.
+    // GCash reference numbers: 12 or 13 characters, letters and numbers.
     const REF_RULES = {
-      "GCash / QR PH": { re: /^\d{12,13}$/, hint: "GCash reference numbers are 12 or 13 digits (numbers only).", msg: "GCash reference numbers are 12 or 13 digits (numbers only). Check your receipt." },
-      "Bank Transfer": { re: /^[A-Za-z0-9-]{6,30}$/, hint: "6 to 30 characters: letters, numbers or dashes.", msg: "Bank reference numbers must be 6 to 30 characters (letters, numbers or dashes only). Check your receipt or deposit slip." }
+      "GCash / QR PH": { re: /^[A-Za-z0-9]{12,13}$/, hint: "12 or 13 characters: letters and numbers only.", msg: "The reference number must be 12 or 13 characters (letters and numbers only). Check your GCash receipt." }
     };
 
     function lines() {
@@ -218,38 +204,11 @@ while ($row = $res->fetch_assoc()) {
 
       const paymentMethod = val("pay");
 
-      $("proofBox").classList.toggle("hide", paymentMethod === "Cash");
       $("refBox").classList.toggle("hide", paymentMethod === "Cash");
       $("refHint").textContent = (REF_RULES[paymentMethod] || {}).hint || "";
+      $("paymentDetails").classList.toggle("hide", paymentMethod === "Cash");
+      $("gcashDetails").classList.toggle("hide", paymentMethod !== "GCash / QR PH");
 
-      $("paymentDetails").classList.toggle(
-        "hide",
-        paymentMethod === "Cash"
-      );
-
-      $("gcashDetails").classList.toggle(
-        "hide",
-        paymentMethod !== "GCash / QR PH"
-      );
-
-      $("bankDetails").classList.toggle(
-        "hide",
-        paymentMethod !== "Bank Transfer"
-      );
-      $("paymentDetails").classList.toggle(
-        "hide",
-        paymentMethod === "Cash"
-      );
-
-      $("gcashDetails").classList.toggle(
-        "hide",
-        paymentMethod !== "GCash / QR PH"
-      );
-
-      $("bankDetails").classList.toggle(
-        "hide",
-        paymentMethod !== "Bank Transfer"
-      );
       $("items").innerHTML = L.map(renderLine).join("");
 
       $("sum").innerHTML =
@@ -309,7 +268,6 @@ while ($row = $res->fetch_assoc()) {
       const L = lines();
       const del = val("ful") === "delivery";
       const pay = val("pay");
-      const file = $("proof").files[0];
       const err = $("err");
 
       err.textContent = "";
@@ -324,11 +282,6 @@ while ($row = $res->fetch_assoc()) {
       if (!/^09\d{9}$/.test(phone)) {
           err.textContent = "Enter a valid 11-digit mobile number starting with 09.";
           return;
-      }
-
-      if (pay !== "Cash" && !file) {
-        err.textContent = "Upload your proof of payment for " + pay + ".";
-        return;
       }
 
       const ref = $("ref").value.replace(/\s+/g, "");
@@ -357,28 +310,6 @@ while ($row = $res->fetch_assoc()) {
       btn.disabled = true;
       err.textContent = "";
 
-      // Upload the proof of payment first; checkout stores the returned link
-      let proofUrl = null;
-      if (pay !== "Cash" && file) {
-        try {
-          const fd = new FormData();
-          fd.append("proof", file);
-          const up = await fetch("api/upload-proof.php", { method: "POST", body: fd, credentials: "same-origin" });
-          const upData = await up.json();
-          if (!upData.success) {
-            err.textContent = upData.error || "Could not upload your proof of payment.";
-            btn.disabled = false;
-            return;
-          }
-          proofUrl = upData.url;
-        } catch (e) {
-          console.error(e);
-          err.textContent = "Could not upload your proof of payment. Please try again.";
-          btn.disabled = false;
-          return;
-        }
-      }
-
       const orderData = {
         customer: DHP.user(),
         total: total,
@@ -386,7 +317,6 @@ while ($row = $res->fetch_assoc()) {
         address: del ? $("addr").value.trim() : "",
         phone: $("phone").value.trim(),
         payment: pay,
-        proof: proofUrl,
         reference_number: pay === "Cash" ? "" : ref,
         items: items
       };
@@ -399,6 +329,12 @@ while ($row = $res->fetch_assoc()) {
         });
 
         const data = await response.json();
+
+        if (data.session_expired || response.status === 401) {
+          // Session ended: show the "session expired" pop-up and log out automatically
+          DHP.sessionExpired();
+          return;
+        }
 
         if (!data.success) {
           err.textContent = data.error || "Failed to place order.";

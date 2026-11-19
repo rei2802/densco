@@ -204,7 +204,11 @@ try {
         `<td>${DHP.esc(o.payment)}</td>` +
         `<td>${proofCell}</td>` +
         `<td>${o.reference_number ? DHP.esc(o.reference_number) : '<span class="muted sm">N/A</span>'}</td>` +
-        `<td>${statusSelect}</td>` +
+        `<td>${statusSelect}` +
+          (o.status === "cancelled" && o.cancel_reason
+            ? `<div class="muted sm" style="margin-top:6px;max-width:220px">Reason: ${DHP.esc(o.cancel_reason)}</div>`
+            : "") +
+        `</td>` +
         `</tr>`
       );
     }
