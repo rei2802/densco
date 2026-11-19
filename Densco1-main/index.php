@@ -16,11 +16,15 @@ while ($row = $res->fetch_assoc()) {
     ];
 }
 
-// Tally units sold per product from order line items, so the homepage
+// Tally units sold per product from non-cancelled order line items, so the homepage
 // can surface a real "Best-Selling Products" section.
 $soldByProduct = [];
 $soldRes = $conn->query(
-    "SELECT product_id, SUM(quantity) AS units_sold FROM order_items GROUP BY product_id"
+    "SELECT oi.product_id, SUM(oi.quantity) AS units_sold
+         FROM order_items oi
+         JOIN orders o ON o.order_id = oi.order_id
+         WHERE o.status <> 'cancelled'
+         GROUP BY oi.product_id"
 );
 while ($soldRow = $soldRes->fetch_assoc()) {
     $soldByProduct[(int)$soldRow["product_id"]] = (int)$soldRow["units_sold"];
@@ -131,8 +135,8 @@ unset($p);
           return;
         }
 
-        DHP.addToCart(+b.dataset.add, 1);
-        DHP.toast("Added to your cart");
+        const id = +b.dataset.add;
+        DHP.cartNotice(id, 1, DHP.addToCart(id, 1));
       });
 
       const CAT_LIMIT = 5;
@@ -155,19 +159,33 @@ unset($p);
         renderCats();
       });
       renderCats();
+      const mapUrl = DHP.safeUrl(B.mapUrl),
+        fbUrl = DHP.safeUrl(B.facebook),
+        viber = DHP.viberDigits(B.viber);
+      const contactHtml =
+        (B.viber
+          ? `<p class="biz-links">Viber: <a href="${viber ? "viber://chat?number=" + encodeURIComponent(viber) : "#"}">${DHP.esc(B.viber)}</a></p>`
+          : "") +
+        (fbUrl
+          ? `<p class="biz-links">Facebook: <a href="${DHP.esc(fbUrl)}" target="_blank" rel="noopener">Visit our Facebook page</a></p>`
+          : "") +
+        `<p>${DHP.esc(B.contact)} are supported for inquiries.</p>`;
       document.getElementById("biz").innerHTML = [
-        ["Location", B.address],
-        ["Opening hours", B.hours],
-        ["Contact us", B.contact + " are supported for inquiries."],
+        [
+          "Location",
+          `<p>${DHP.esc(B.address)}</p>` +
+            (mapUrl
+              ? `<p class="biz-links"><a href="${DHP.esc(mapUrl)}" target="_blank" rel="noopener">View on map</a></p>`
+              : ""),
+        ],
+        ["Opening hours", `<p>${DHP.esc(B.hours)}</p>`],
+        ["Contact us", contactHtml],
         [
           "Ordering",
-          "Store pickup or delivery. Pay by GCash / QR PH, bank transfer or cash.",
+          "<p>Store pickup or delivery. Pay by GCash / QR PH, bank transfer or cash.</p>",
         ],
       ]
-        .map(
-          (i) =>
-            `<div><h4>${i[0]}</h4><p>${DHP.esc(i[1])}</p></div>`,
-        )
+        .map((i) => `<div><h4>${i[0]}</h4>${i[1]}</div>`)
         .join("");
       document.getElementById("biz").style.cssText =
         "display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px 28px";

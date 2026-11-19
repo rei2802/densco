@@ -1131,3 +1131,34 @@ label.opt span{font-size:12px;color:var(--mute)}
 .status-sel.st-completed{background-color:#DCFCE7;color:#166534;border-color:#86EFAC}
 .status-sel.st-cancelled{background-color:#FEE2E2;color:#991B1B;border-color:#FCA5A5}
 .status-sel:disabled{opacity:1;cursor:not-allowed}
+/* ---- Account forms: inline errors, hints, eye toggle, loading screen ---- */
+.field-err{color:#B91C1C;font-size:12.5px;margin:5px 0 0;min-height:0}
+.field-err:empty{display:none}
+.field-hint{color:var(--mute);font-size:12px;margin:5px 0 0}
+.field.invalid input{border-color:#B91C1C}
+.field.invalid input:focus{box-shadow:0 0 0 3px rgba(185,28,28,.15)}
+.form-err{margin-top:12px;text-align:center}
+.field-ok{color:var(--ok);font-size:13px;margin-top:12px;text-align:center}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:44px}
+.pw-toggle{position:absolute;top:0;right:0;height:100%;width:42px;display:flex;align-items:center;justify-content:center;background:none;border:0;color:var(--mute);cursor:pointer;border-radius:0 8px 8px 0}
+.pw-toggle:hover{color:var(--ink)}
+.pw-toggle:focus-visible{outline:2px solid var(--red);outline-offset:-2px}
+.forgot{margin:6px 0 0;font-size:12.5px;text-align:right}
+.loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.78);display:flex;align-items:center;justify-content:center;z-index:500}
+.loading-box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:26px 34px;box-shadow:var(--sh);text-align:center;font-size:14px;color:var(--ink);font-weight:600}
+.loading-box p{margin-top:12px}
+.spinner{display:inline-block;width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--red);border-radius:50%;animation:dhp-spin .8s linear infinite}
+@keyframes dhp-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation-duration:2.4s}}
+
+/* ---- Cart notification, shop sorting, product quantity message ---- */
+.toast-cart{display:flex;align-items:center;gap:14px;max-width:calc(100vw - 32px)}
+.toast-cart a{color:#fff;font-weight:700;text-decoration:underline;white-space:nowrap}
+.toast-warn{background:#92400E}
+.toolbar .sort{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mute)}
+.toolbar .sort select{width:auto}
+.qty-msg{font-size:12.5px;color:#B45309;margin:6px 0 0;min-height:0}
+.qty-msg:empty{display:none}
+.qty input{text-align:center}
+.biz-links a{font-weight:600}

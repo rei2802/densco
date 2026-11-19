@@ -19,11 +19,15 @@ while ($row = $res->fetch_assoc()) {
     ];
 }
 
-// Tally units sold per product from completed order line items, so the
+// Tally units sold per product from non-cancelled order line items, so the
 // Shop can surface a real "Best-Selling Products" section.
 $soldByProduct = [];
 $soldRes = $conn->query(
-    "SELECT product_id, SUM(quantity) AS units_sold FROM order_items GROUP BY product_id"
+    "SELECT oi.product_id, SUM(oi.quantity) AS units_sold
+         FROM order_items oi
+         JOIN orders o ON o.order_id = oi.order_id
+         WHERE o.status <> 'cancelled'
+         GROUP BY oi.product_id"
 );
 while ($soldRow = $soldRes->fetch_assoc()) {
     $soldByProduct[(int)$soldRow["product_id"]] = (int)$soldRow["units_sold"];
@@ -64,6 +68,16 @@ unset($p);
       <section>
         <div class="toolbar">
           <input id="q" type="search" placeholder="Search products" aria-label="Search products" style="max-width:none;flex:1">
+          <label class="sort">Sort by
+            <select id="sort" aria-label="Sort products">
+              <option value="">Default</option>
+              <option value="best">Best selling</option>
+              <option value="price-asc">Price: low to high</option>
+              <option value="price-desc">Price: high to low</option>
+              <option value="name-asc">Name: A to Z</option>
+              <option value="name-desc">Name: Z to A</option>
+            </select>
+          </label>
           <span class="muted" id="count" style="align-self:center"></span>
         </div>
         <div class="pgrid" id="grid"></div>
@@ -88,9 +102,21 @@ unset($p);
     const qs = new URLSearchParams(location.search);
     let cat = qs.get("cat") || "";
     let term = qs.get("q") || "";
+    let sort = qs.get("sort") || "";
 
     const $ = (id) => document.getElementById(id);
     $("q").value = term;
+    if (![...$("sort").options].some((o) => o.value === sort)) sort = "";
+    $("sort").value = sort;
+
+    const SORTS = {
+      "price-asc": (a, b) => a.price - b.price,
+      "price-desc": (a, b) => b.price - a.price,
+      "name-asc": (a, b) => a.name.localeCompare(b.name),
+      "name-desc": (a, b) => b.name.localeCompare(a.name),
+      best: (a, b) => (b.sold || 0) - (a.sold || 0),
+    };
+    const sorted = (list) => (SORTS[sort] ? [...list].sort(SORTS[sort]) : list);
 
     function renderCategoryButton(c) {
       return `<button class="${c[0] === cat ? "on" : ""}" data-cat="${c[0]}"><span>${c[1]}</span><span>${c[2]}</span></button>`;
@@ -139,8 +165,8 @@ unset($p);
         return;
       }
 
-      DHP.addToCart(+b.dataset.add, 1);
-      DHP.toast("Added to your cart");
+      const id = +b.dataset.add;
+      DHP.cartNotice(id, 1, DHP.addToCart(id, 1));
     }
 
     function render() {
@@ -154,8 +180,8 @@ unset($p);
             const matches = all.filter(
         (p) => (!cat || p.cat === cat) && p.name.toLowerCase().includes(term.toLowerCase())
       );
-      const L = matches.filter((p) => !isSoldOut(p));
-      const S = matches.filter(isSoldOut);
+      const L = sorted(matches.filter((p) => !isSoldOut(p)));
+      const S = sorted(matches.filter(isSoldOut));
 
       $("count").textContent = L.length + " product" + (L.length === 1 ? "" : "s") +
         (S.length ? " · " + S.length + " sold out" : "");
@@ -173,6 +199,11 @@ unset($p);
 
     $("q").addEventListener("input", (e) => {
       term = e.target.value;
+      render();
+    });
+
+    $("sort").addEventListener("change", (e) => {
+      sort = e.target.value;
       render();
     });
 

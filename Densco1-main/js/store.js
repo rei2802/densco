@@ -37,6 +37,37 @@
       })
     );
   };
+  // Friendly "added to cart" message: names the product and links to the cart.
+  // added = units actually added (0 = already at the stock limit).
+  D.cartNotice = function (id, asked, added) {
+    var p = D.products().filter(function (x) {
+        return x.id === id;
+      })[0],
+      name = p ? p.name : "Item",
+      t = document.createElement("div"),
+      msg = document.createElement("span");
+    t.className = "toast toast-cart" + (added > 0 ? "" : " toast-warn");
+    t.setAttribute("role", "status");
+    if (added <= 0)
+      msg.textContent =
+        "Not added: your cart already has all " + (p ? p.stock : "available") + " units of " + name + " in stock.";
+    else if (added < asked)
+      msg.textContent =
+        "Only " + added + " more of " + name + " added: that is all the stock available.";
+    else
+      msg.textContent =
+        "\u2713 " + (added > 1 ? added + " \u00D7 " : "") + name + " added to your cart.";
+    t.appendChild(msg);
+    var a = document.createElement("a");
+    a.href = "cart.php";
+    a.textContent = "View cart";
+    t.appendChild(a);
+    document.body.appendChild(t);
+    setTimeout(function () {
+      t.remove();
+    }, 4200);
+  };
+
   D.toast = function (m) {
     var t = document.createElement("div");
     t.className = "toast";
@@ -86,13 +117,38 @@
         : +s.deliveryFee;
     return s;
   };
+  // Business details shown on the home page, footer and chatbot.
+  // >>> Fill in the three empty values below with the real ones. <<<
+  //   viber    : Viber number, e.g. "0917 123 4567"
+  //   facebook : full link to the Facebook page, e.g. "https://www.facebook.com/yourpage"
+  //   mapUrl   : Google Maps link to the exact location (optional, adds a "View on map" link)
+  // They can also be changed by the Owner in Settings (saved in that browser only).
+  var BIZ_DEFAULTS = {
+    address: "Quezon City, Metro Manila, Philippines",
+    hours: "Monday to Saturday, 8:00 AM to 6:00 PM",
+    contact: "Viber, Messenger and SMS",
+    viber: "",
+    facebook: "",
+    mapUrl: "",
+  };
   D.biz = function () {
-    var s = D.settings();
-    return {
-      address: s.address || "Quezon City, Metro Manila, Philippines",
-      hours: s.hours || "Monday to Saturday, 8:00 AM to 6:00 PM",
-      contact: s.contact || "Viber, Messenger and SMS",
-    };
+    var s = D.settings(),
+      o = {};
+    Object.keys(BIZ_DEFAULTS).forEach(function (k) {
+      o[k] = s[k] || BIZ_DEFAULTS[k];
+    });
+    return o;
+  };
+  // Only http(s) links are used for the Facebook / map buttons.
+  D.safeUrl = function (u) {
+    return /^https?:\/\//i.test(u || "") ? u : "";
+  };
+  // "0917 123 4567" -> "+639171234567" (for viber:// and tel: links)
+  D.viberDigits = function (v) {
+    var d = String(v || "").replace(/[^\d+]/g, "");
+    if (/^0\d{10}$/.test(d)) d = "+63" + d.slice(1);
+    else if (/^63\d{10}$/.test(d)) d = "+" + d;
+    return d;
   };
 
   // Products always come from the database: each PHP page sets window.DHP_PRODUCTS
@@ -169,14 +225,27 @@
       return n + i.qty;
     }, 0);
   };
+  // Adds q units of product id to the cart, never going above the stock on hand
+  // (checkout would reject the order otherwise). Returns the number of units
+  // actually added: 0 means the cart already holds all the available stock.
   D.addToCart = function (id, q) {
     var c = D.cart(),
       f = c.filter(function (i) {
         return i.id === id;
-      })[0];
-    if (f) f.qty += q;
-    else c.push({ id: id, qty: q });
-    D.saveCart(c);
+      })[0],
+      p = D.products().filter(function (x) {
+        return x.id === id;
+      })[0],
+      max = p && typeof p.stock === "number" ? Math.max(0, p.stock) : Infinity,
+      have = f ? f.qty : 0,
+      next = Math.min(have + q, max),
+      added = Math.max(0, next - have);
+    if (added > 0) {
+      if (f) f.qty = next;
+      else c.push({ id: id, qty: next });
+      D.saveCart(c);
+    }
+    return added;
   };
 
   D.user = function () {

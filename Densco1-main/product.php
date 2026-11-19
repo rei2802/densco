@@ -77,7 +77,8 @@ while ($row = $res->fetch_assoc()) {
           `<div class="stock ${DHP.shopState(p)}">${DHP.shopStateLabel(p)}</div>` +
           `<p class="pd-desc">${DHP.esc(p.desc)}</p>` +
           `<div class="flex" style="margin-bottom:14px"><b>Supplier:</b><span>${DHP.esc(p.supplier || "Densco")}</span></div>` +
-          `<div class="flex"><b>Quantity</b><div class="qty"><button id="m">−</button><input id="q" value="1" readonly><button id="pl">+</button></div></div>` +
+          `<div class="flex"><b>Quantity</b><div class="qty"><button id="m">−</button><input id="q" type="number" inputmode="numeric" min="1" max="${Math.max(1, p.stock)}" step="1" value="1" aria-label="Quantity" ${DHP.canOrder(p) ? "" : "disabled"}><button id="pl">+</button></div></div>` +
+          `<p class="qty-msg" id="qtyMsg" role="alert"></p>` +
           `<div class="flex mt">` +
             `<button class="btn btn-red btn-lg" id="now" ${DHP.canOrder(p) ? "" : "disabled"}>Order Now</button>` +
             `<button class="btn btn-line btn-lg" id="add" ${DHP.canOrder(p) ? "" : "disabled"}>Add to Cart</button>` +
@@ -85,13 +86,42 @@ while ($row = $res->fetch_assoc()) {
           `<p class="muted sm mt">Pickup at our Quezon City warehouse or delivery in Metro Manila (1 to 2 days). Pay by GCash / QR PH, bank transfer or cash.</p>` +
         `</div>`;
 
-      const setQty = (n) => {
-        qty = Math.max(1, Math.min(p.stock, n));
-        document.getElementById("q").value = qty;
+      const qEl = document.getElementById("q"),
+        qMsg = document.getElementById("qtyMsg");
+      // Keeps the quantity a whole number from 1 up to the stock on hand and
+      // says why when the typed or clicked value had to be corrected.
+      const setQty = (n, typed) => {
+        const max = Math.max(1, p.stock);
+        let msg = "";
+        if (typed !== undefined && String(typed).trim() === "") {
+          n = 1;
+          msg = "Enter a quantity of at least 1.";
+        } else if (!Number.isFinite(n)) {
+          n = 1;
+          msg = "Enter a whole number.";
+        } else if (!Number.isInteger(n)) {
+          n = Math.floor(n);
+          msg = "Quantity must be a whole number.";
+        }
+        if (n < 1) {
+          if (!msg) msg = "The minimum quantity is 1.";
+          n = 1;
+        }
+        if (n > max) {
+          msg = "Only " + p.stock + " unit" + (p.stock === 1 ? " is" : "s are") + " in stock.";
+          n = max;
+        }
+        qty = n;
+        qEl.value = qty;
+        qMsg.textContent = msg;
       };
 
       document.getElementById("m").onclick = () => setQty(qty - 1);
       document.getElementById("pl").onclick = () => setQty(qty + 1);
+      qEl.addEventListener("change", () => setQty(qEl.valueAsNumber, qEl.value));
+      qEl.addEventListener("keydown", (e) => {
+        if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault();
+      });
 
       const buy = (go) => {
         if (!DHP.user()) {
@@ -99,9 +129,10 @@ while ($row = $res->fetch_assoc()) {
           return;
         }
 
-        DHP.addToCart(p.id, qty);
+        setQty(qEl.valueAsNumber, qEl.value);
+        const added = DHP.addToCart(p.id, qty);
         if (go) location.href = "cart.php";
-        else DHP.toast("Added to your cart");
+        else DHP.cartNotice(p.id, qty, added);
       };
 
       document.getElementById("add").onclick = () => buy(false);

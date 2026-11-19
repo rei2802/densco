@@ -29,6 +29,15 @@
               <div class="field">
                 <label>Contact channels</label><input id="sContact" />
               </div>
+              <div class="field">
+                <label>Viber number</label><input id="sViber" placeholder="0917 123 4567" />
+              </div>
+              <div class="field">
+                <label>Facebook page link</label><input id="sFb" type="url" placeholder="https://www.facebook.com/yourpage" />
+              </div>
+              <div class="field">
+                <label>Map link (Google Maps)</label><input id="sMap" type="url" placeholder="https://maps.app.goo.gl/..." />
+              </div>
             </div>
             <div class="card">
               <h3>Operations</h3>
@@ -55,6 +64,9 @@
       $("sAddr").value = b.address;
       $("sHours").value = b.hours;
       $("sContact").value = b.contact;
+      $("sViber").value = b.viber;
+      $("sFb").value = b.facebook;
+      $("sMap").value = b.mapUrl;
       $("sFee").value = s.deliveryFee;
       $("sLow").value = s.lowStock;
       $("save").onclick = () => {
@@ -62,6 +74,9 @@
           address: $("sAddr").value.trim(),
           hours: $("sHours").value.trim(),
           contact: $("sContact").value.trim(),
+          viber: $("sViber").value.trim(),
+          facebook: DHP.safeUrl($("sFb").value.trim()),
+          mapUrl: DHP.safeUrl($("sMap").value.trim()),
           deliveryFee: +$("sFee").value || 0,
           lowStock: +$("sLow").value || 0,
         });

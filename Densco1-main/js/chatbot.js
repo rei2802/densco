@@ -13,11 +13,16 @@
   var KEY = "denscoInquiries";
   var POLL = 4000;
 
-  // Path to the PHP file. It starts with "/" so it works from ANY page
-  // (home, shop, My Account, admin). A path like "api/chatbot.php" breaks as
-  // soon as the page is in a different folder, for example after logging in.
-  // On a live website at the domain root, change this to "/api/chatbot.php".
-  var API_URL = "/api/chatbot.php";
+  // Path to the PHP file, worked out from where THIS script was loaded
+  // (<site>/js/chatbot.js -> <site>/api/chatbot.php). It therefore works from
+  // any page and under any folder name (XAMPP sub-folder or domain root).
+  var API_URL = (function () {
+    try {
+      var src = document.currentScript && document.currentScript.src;
+      if (src) return new URL("../api/chatbot.php", src).href;
+    } catch (e) {}
+    return "/api/chatbot.php";
+  })();
 
   var GREETING =
     "Good day! I am the Densco Assistant. How may I help you with product availability, delivery, payment or your orders?";

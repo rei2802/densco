@@ -89,6 +89,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['summary'])) {
 }
 
 // ============================================
+// Server-side access check (same rule as orders.php): every other request to
+// this page - the page itself, adjust/edit/add/delete/set_status - needs a real
+// staff session with the Owner, Administrator or Inventory Staff role. The
+// browser-side redirect in js/staff-portal.js is only a convenience.
+// ============================================
+if (session_status() === PHP_SESSION_NONE) session_start();
+$staffRole = $_SESSION['staff_role'] ?? null;
+$isApiRequest = $_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['json']);
+if (!$staffRole) {
+    if ($isApiRequest) {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'error' => 'Please log in again.']);
+        exit;
+    }
+    header('Location: login.php');
+    exit;
+}
+if (!in_array($staffRole, ['owner', 'admin', 'inventory'], true)) {
+    if ($isApiRequest) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'error' => 'Not allowed.']);
+        exit;
+    }
+    header('Location: dashboard.html');
+    exit;
+}
+
+// ============================================
 // Handle POST actions from the inline script below:
 // adjust stock (JSON), set availability status (JSON), add/edit a product
 // (multipart form, since these can include an image file), or delete a
