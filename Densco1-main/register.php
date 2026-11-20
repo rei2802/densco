@@ -86,7 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $name = $row['full_name'];
-            $ins = $conn->prepare("INSERT INTO users (full_name, email, password) VALUES (?, ?, ?)");
+            // The code was just confirmed, so this account is verified from day one.
+            ensure_verified_column($conn);
+            $ins = $conn->prepare("INSERT INTO users (full_name, email, password, email_verified_at) VALUES (?, ?, ?, NOW())");
             $ins->bind_param("sss", $name, $email, $row['password_hash']);
             $ins->execute();
             $newId = $conn->insert_id;

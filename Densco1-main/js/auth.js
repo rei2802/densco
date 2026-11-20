@@ -294,7 +294,7 @@
   };
 
   [].forEach.call(
-    document.querySelectorAll("#loginForm, #registerForm, #verifyForm, #forgotForm, #resetForm"),
+    document.querySelectorAll("#loginForm, #loginVerifyForm, #registerForm, #verifyForm, #forgotForm, #resetForm"),
     function (f) {
       addEyeToggles(f);
       clearOnType(f);
@@ -316,6 +316,7 @@
   }
 
   var lf = document.getElementById("loginForm");
+  var showLoginVerify = function () {};   // set below when the page has the code form
   if (lf)
     lf.addEventListener("submit", function (e) {
       e.preventDefault();
@@ -342,6 +343,12 @@
           location.href = "staff/dashboard.html";
           return;
         }
+        if (data.success && data.step === "verify") {
+          // Older account that has not verified its email yet: ask for the code.
+          setLoading(false, btn);
+          showLoginVerify(data);
+          return;
+        }
         if (data.success) {
           D.login(data.name);
           go();
@@ -351,6 +358,101 @@
         showServerError(lf, data);
       });
     });
+
+  // ---- Login step 2: accounts created before email verification existed ----
+  var lvf = document.getElementById("loginVerifyForm");
+  if (lvf) {
+    var lvResend = document.getElementById("resendBtn");
+    var lvTimer = null;
+
+    function lvCountdown(secs) {
+      clearInterval(lvTimer);
+      var left = secs;
+      function tick() {
+        if (left > 0) {
+          lvResend.disabled = true;
+          lvResend.textContent = "Send a new code (" + left + "s)";
+          left--;
+        } else {
+          clearInterval(lvTimer);
+          lvResend.disabled = false;
+          lvResend.textContent = "Send a new code";
+        }
+      }
+      tick();
+      lvTimer = setInterval(tick, 1000);
+    }
+
+    showLoginVerify = function (data) {
+      lf.hidden = true;
+      lvf.hidden = false;
+      document.getElementById("verifyIntro").textContent = "We sent a 6-digit code to " + data.email + ".";
+      if (data.dev_otp) document.getElementById("otpHint").textContent = "Local testing - your code is " + data.dev_otp;
+      lvf.elements.code.value = "";
+      lvf.elements.code.focus();
+      lvCountdown(data.cooldown || 60);
+    };
+
+    function backToLogin(msg) {
+      clearInterval(lvTimer);
+      lvf.hidden = true;
+      lf.hidden = false;
+      clearErrors(lf);
+      lf.elements.pw.value = "";
+      setLoading(false, document.getElementById("submitBtn"));
+      if (msg) setError(lf, "form", msg);
+    }
+
+    lvf.elements.code.addEventListener("input", function () {
+      this.value = this.value.replace(/\D/g, "").slice(0, 6);
+    });
+
+    lvf.addEventListener("submit", function (e) {
+      e.preventDefault();
+      clearErrors(lvf);
+      var code = lvf.elements.code.value.trim();
+      if (code.length !== 6) {
+        setError(lvf, "code", "Enter the 6-digit code from your email.");
+        return lvf.elements.code.focus();
+      }
+      var vbtn = document.getElementById("verifyBtn");
+      setLoading(true, vbtn, "Verifying...");
+      postJSON("login.php", { action: "verify", code: code }).then(function (data) {
+        if (data.success) {
+          D.login(data.name);
+          go();
+          return;
+        }
+        setLoading(false, vbtn);
+        if (data.restart) return backToLogin(data.error);
+        setError(lvf, data.field === "form" ? "form" : "code", data.error || "Something went wrong. Please try again.");
+        lvf.elements.code.focus();
+      });
+    });
+
+    lvResend.addEventListener("click", function () {
+      clearErrors(lvf);
+      lvResend.disabled = true;
+      postJSON("login.php", { action: "resend" }).then(function (data) {
+        if (data.success) {
+          document.getElementById("otpHint").textContent = data.dev_otp
+            ? "Local testing - your code is " + data.dev_otp
+            : "A new code was sent. It is valid for 10 minutes.";
+          lvf.elements.code.value = "";
+          lvf.elements.code.focus();
+          lvCountdown(data.cooldown || 60);
+          return;
+        }
+        if (data.restart) return backToLogin(data.error);
+        setError(lvf, "code", data.error || "We could not send a new code. Please try again.");
+        lvCountdown(data.wait || 5);
+      });
+    });
+
+    document.getElementById("backToLoginBtn").addEventListener("click", function () {
+      backToLogin("");
+    });
+  }
 
   var rf = document.getElementById("registerForm");
   if (rf) {

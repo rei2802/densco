@@ -24,6 +24,59 @@ function ensure_otp_table(mysqli $conn) {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Verification for accounts that already exist (created before email
+// verification was added). users.email_verified_at stays NULL for them until
+// they enter a code at login. New sign-ups are stamped as verified on creation.
+// ---------------------------------------------------------------------------
+
+// Adds users.email_verified_at if missing. Existing rows get NULL = unverified.
+function ensure_verified_column(mysqli $conn) {
+    $r = $conn->query("SHOW COLUMNS FROM users LIKE 'email_verified_at'");
+    if ($r->num_rows === 0) {
+        $conn->query("ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL");
+    }
+}
+
+function ensure_login_otp_table(mysqli $conn) {
+    $conn->query(
+        "CREATE TABLE IF NOT EXISTS login_otps (
+            user_id INT NOT NULL PRIMARY KEY,
+            otp_hash CHAR(64) NOT NULL,
+            attempts TINYINT NOT NULL DEFAULT 0,
+            expires_at DATETIME NOT NULL,
+            last_sent_at DATETIME NOT NULL
+        )"
+    );
+}
+
+function login_otp_wait_seconds(mysqli $conn, $userId) {
+    $stmt = $conn->prepare("SELECT GREATEST(0, ? - TIMESTAMPDIFF(SECOND, last_sent_at, NOW())) AS wait_s FROM login_otps WHERE user_id = ? LIMIT 1");
+    $cool = OTP_COOLDOWN_SECS;
+    $stmt->bind_param("ii", $cool, $userId);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $row ? (int)$row['wait_s'] : 0;
+}
+
+// Stores a fresh code for this existing user and returns the plain code.
+function login_otp_store(mysqli $conn, $userId, $email) {
+    $code = otp_generate();
+    $hash = otp_hash_for($email, $code);
+    $mins = OTP_MINUTES;
+    $stmt = $conn->prepare(
+        "INSERT INTO login_otps (user_id, otp_hash, attempts, expires_at, last_sent_at)
+         VALUES (?, ?, 0, NOW() + INTERVAL $mins MINUTE, NOW())
+         ON DUPLICATE KEY UPDATE otp_hash = VALUES(otp_hash), attempts = 0,
+            expires_at = VALUES(expires_at), last_sent_at = NOW()"
+    );
+    $stmt->bind_param("is", $userId, $hash);
+    $stmt->execute();
+    $stmt->close();
+    return $code;
+}
+
 function otp_hash_for($email, $code) {
     return hash('sha256', strtolower($email) . '|' . $code);
 }
@@ -44,17 +97,23 @@ function otp_wait_seconds(mysqli $conn, $email) {
 }
 
 // Emails the code. Returns true if the email provider accepted it.
-function otp_send_email($email, $name, $code) {
+function otp_send_email($email, $name, $code, $forExistingAccount = false) {
     $mins = OTP_MINUTES;
+    $intro = $forExistingAccount
+        ? 'We now verify every email address. Use this code to verify yours and log in to your Densco account:'
+        : 'Use this code to verify your email address and finish creating your Densco account:';
+    $ignore = $forExistingAccount
+        ? 'If you did not try to log in, you can ignore this email.'
+        : 'If you did not try to create an account, you can ignore this email.';
     $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
     $subject = "Your Densco verification code: $code";
     $text = "Hello $name,\r\n\r\nYour Densco Health Products verification code is: $code\r\n\r\n"
-          . "It is valid for $mins minutes. If you did not try to create an account, you can ignore this email.\r\n";
+          . "It is valid for $mins minutes. $ignore\r\n";
     $html = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#222">'
           . "<p>Hello $safeName,</p>"
-          . '<p>Use this code to verify your email address and finish creating your Densco account:</p>'
+          . "<p>$intro</p>"
           . '<p style="font-size:32px;letter-spacing:8px;font-weight:700;margin:24px 0">' . $code . '</p>'
-          . "<p>The code is valid for $mins minutes. If you did not try to create an account, you can ignore this email.</p>"
+          . "<p>The code is valid for $mins minutes. $ignore</p>"
           . '<p style="color:#888;font-size:12px">Densco Health Products</p></div>';
     return send_email($email, $name, $subject, $html, $text);
 }

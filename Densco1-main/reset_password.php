@@ -35,7 +35,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $hash = password_hash($pw, PASSWORD_DEFAULT);
         $uid  = (int)$reset['user_id'];
-        $upd = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
+        // Following the emailed reset link proves the person owns this address.
+        require_once 'email_otp_lib.php';
+        ensure_verified_column($conn);
+        $upd = $conn->prepare("UPDATE users SET password = ?, email_verified_at = COALESCE(email_verified_at, NOW()) WHERE user_id = ?");
         $upd->bind_param("si", $hash, $uid);
         $upd->execute();
         $upd->close();

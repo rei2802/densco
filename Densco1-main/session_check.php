@@ -16,4 +16,25 @@ if (empty($_SESSION['user_id'])) {
     echo json_encode(['success' => false, 'session_expired' => true]);
     exit;
 }
+
+// Customers who were already logged in when email verification was introduced
+// must verify too: end their session so the next login asks for the code.
+require_once __DIR__ . '/config.php';
+$uid = (int)$_SESSION['user_id'];
+$col = $conn->query("SHOW COLUMNS FROM users LIKE 'email_verified_at'");
+if ($col->num_rows > 0) {
+    $st = $conn->prepare("SELECT email_verified_at FROM users WHERE user_id = ? LIMIT 1");
+    $st->bind_param("i", $uid);
+    $st->execute();
+    $u = $st->get_result()->fetch_assoc();
+    $st->close();
+    if ($u && $u['email_verified_at'] === null) {
+        session_start();          // reopen for writing (the first call was read-only)
+        session_unset();
+        session_destroy();
+        http_response_code(401);
+        echo json_encode(['success' => false, 'session_expired' => true, 'needs_verification' => true]);
+        exit;
+    }
+}
 echo json_encode(['success' => true]);
