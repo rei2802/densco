@@ -3,3 +3,5 @@ Densco1-main/api/config_ex.php
 config/cloudinary.php
 vendor/
 .env
+
+Densco1-main/config/mail.php

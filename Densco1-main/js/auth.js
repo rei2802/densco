@@ -294,7 +294,7 @@
   };
 
   [].forEach.call(
-    document.querySelectorAll("#loginForm, #registerForm, #forgotForm, #resetForm"),
+    document.querySelectorAll("#loginForm, #registerForm, #verifyForm, #forgotForm, #resetForm"),
     function (f) {
       addEyeToggles(f);
       clearOnType(f);
@@ -393,16 +393,110 @@
       if (bad) return focusFirstError(rf);
 
       // The confirm-password value is checked here and is not sent to the server.
-      setLoading(true, btn, "Creating your account...");
-      postJSON("register.php", { name: nameVal, email: emailVal, pw: pwVal }).then(function (data) {
+      // Step 1: the server checks the details and emails a 6-digit code.
+      // The account is created only after the code is verified (step 2 below).
+      setLoading(true, btn, "Sending your code...");
+      postJSON("register.php", { action: "start", name: nameVal, email: emailVal, pw: pwVal }).then(function (data) {
+        setLoading(false, btn);
+        if (data.success && data.step === "verify") {
+          showVerifyStep(data);
+          return;
+        }
+        showServerError(rf, data);
+      });
+    });
+
+    // ---- Step 2: enter the code ----
+    var vf = document.getElementById("verifyForm");
+    var resendBtn = document.getElementById("resendBtn");
+    var timer = null;
+
+    function countdown(secs) {
+      clearInterval(timer);
+      var left = secs;
+      function tick() {
+        if (left > 0) {
+          resendBtn.disabled = true;
+          resendBtn.textContent = "Send a new code (" + left + "s)";
+          left--;
+        } else {
+          clearInterval(timer);
+          resendBtn.disabled = false;
+          resendBtn.textContent = "Send a new code";
+        }
+      }
+      tick();
+      timer = setInterval(tick, 1000);
+    }
+
+    function showVerifyStep(data) {
+      rf.hidden = true;
+      vf.hidden = false;
+      document.getElementById("verifyIntro").textContent = "We sent a 6-digit code to " + data.email + ".";
+      var hint = document.getElementById("otpHint");
+      // Local testing only: the server returns the code when no email key is set up.
+      if (data.dev_otp) hint.textContent = "Local testing - your code is " + data.dev_otp;
+      vf.elements.code.value = "";
+      vf.elements.code.focus();
+      countdown(data.cooldown || 60);
+    }
+
+    function backToForm(msg) {
+      clearInterval(timer);
+      vf.hidden = true;
+      rf.hidden = false;
+      clearErrors(rf);
+      if (msg) setError(rf, "form", msg);
+    }
+
+    vf.elements.code.addEventListener("input", function () {
+      this.value = this.value.replace(/\D/g, "").slice(0, 6);
+    });
+
+    vf.addEventListener("submit", function (e) {
+      e.preventDefault();
+      clearErrors(vf);
+      var code = vf.elements.code.value.trim();
+      if (code.length !== 6) {
+        setError(vf, "code", "Enter the 6-digit code from your email.");
+        return vf.elements.code.focus();
+      }
+      var vbtn = document.getElementById("verifyBtn");
+      setLoading(true, vbtn, "Verifying...");
+      postJSON("register.php", { action: "verify", code: code }).then(function (data) {
         if (data.success) {
           D.login(data.name);
           go();
           return;
         }
-        setLoading(false, btn);
-        showServerError(rf, data);
+        setLoading(false, vbtn);
+        if (data.restart) return backToForm(data.error);
+        setError(vf, "code", data.error || "Something went wrong. Please try again.");
+        vf.elements.code.focus();
       });
+    });
+
+    resendBtn.addEventListener("click", function () {
+      clearErrors(vf);
+      resendBtn.disabled = true;
+      postJSON("register.php", { action: "resend" }).then(function (data) {
+        if (data.success) {
+          document.getElementById("otpHint").textContent = data.dev_otp
+            ? "Local testing - your code is " + data.dev_otp
+            : "A new code was sent. It is valid for 10 minutes.";
+          vf.elements.code.value = "";
+          vf.elements.code.focus();
+          countdown(data.cooldown || 60);
+          return;
+        }
+        if (data.restart) return backToForm(data.error);
+        setError(vf, "code", data.error || "We could not send a new code. Please try again.");
+        countdown(data.wait || 5);
+      });
+    });
+
+    document.getElementById("changeEmailBtn").addEventListener("click", function () {
+      backToForm("");
     });
   }
 })();
