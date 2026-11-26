@@ -1119,7 +1119,7 @@ label.opt span{font-size:12px;color:var(--mute)}
 .soldout-section { margin-top: 40px; }
 .pcard.is-soldout .pthumb { opacity: .5; filter: grayscale(1); }
 .pcard.is-soldout .pname { color: #777; }
-.pcard.is-soldout .btn[disabled] { cursor: not-allowed; }
+.btn-out-of-stock:disabled { background: #e5e7eb; color: #4b5563; opacity: 1; }
 
 
 /* Order status dropdown (staff Orders page): colour follows the selected status */
@@ -1131,6 +1131,24 @@ label.opt span{font-size:12px;color:var(--mute)}
 .status-sel.st-completed{background-color:#DCFCE7;color:#166534;border-color:#86EFAC}
 .status-sel.st-cancelled{background-color:#FEE2E2;color:#991B1B;border-color:#FCA5A5}
 .status-sel:disabled{opacity:1;cursor:not-allowed}
+
+.order-list{container-type:inline-size;overflow:visible}
+.orders-table{table-layout:fixed}
+.orders-table th,.orders-table td{padding:10px 8px;white-space:normal;overflow-wrap:anywhere}
+.orders-table th:first-child{width:6.5rem}
+.orders-table th:last-child{width:9.5rem}
+.orders-table .status-sel{width:100%;min-width:0;padding:6px 24px 6px 8px}
+
+@container (max-width: 740px){
+  table.orders-table,.orders-table tbody{display:block}
+  .orders-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  .orders-table tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:8px;border-bottom:1px solid var(--line)}
+  .orders-table tbody tr:last-child{border-bottom:0}
+  .orders-table td{border-bottom:0}
+  .orders-table td[data-label]::before{content:attr(data-label);display:block;margin-bottom:4px;font-size:12px;font-weight:600;color:var(--mute)}
+  .orders-table td[data-label="Status"]{grid-area:1 / 2}
+  .orders-table td[colspan]{grid-column:1 / -1}
+}
 /* ---- Account forms: inline errors, hints, eye toggle, loading screen ---- */
 .field-err{color:#B91C1C;font-size:12.5px;margin:5px 0 0;min-height:0}
 .field-err:empty{display:none}
@@ -1141,6 +1159,7 @@ label.opt span{font-size:12px;color:var(--mute)}
 .field-ok{color:var(--ok);font-size:13px;margin-top:12px;text-align:center}
 .pw-wrap{position:relative}
 .pw-wrap input{padding-right:44px}
+#registerForm #p2::-ms-reveal{display:none}
 .pw-toggle{position:absolute;top:0;right:0;height:100%;width:42px;display:flex;align-items:center;justify-content:center;background:none;border:0;color:var(--mute);cursor:pointer;border-radius:0 8px 8px 0}
 .pw-toggle:hover{color:var(--ink)}
 .pw-toggle:focus-visible{outline:2px solid var(--red);outline-offset:-2px}

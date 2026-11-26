@@ -577,7 +577,11 @@ while ($row = $res->fetch_assoc()) {
     }
 
     function render() {
-      const P = DHP.products().filter((p) => p.name.toLowerCase().includes(term.toLowerCase()));
+      const query = term.toLowerCase();
+      const stockPriority = (p) => Math.min(p.stock, LOW + 1);
+      const P = DHP.products()
+        .filter((p) => p.name.toLowerCase().includes(query))
+        .sort((a, b) => stockPriority(a) - stockPriority(b));
 
       $("rows").innerHTML = P.map((p) => {
         const st = DHP.state(p);
@@ -589,10 +593,6 @@ while ($row = $res->fetch_assoc()) {
           ? `<img src="${imgUrl(p.image)}" alt="" style="display:inline-block;width:40px;height:40px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle">`
           : "";
 
-        // Status column: dropdown (In Stock / Not Available). A small badge is kept next to it
-        // only when the quantity is actually low or out, so staff still see the warning.
-        const stockWarn = st === "low" ? ' <span class="badge low">Low Stock</span>'
-          : st === "out" ? ' <span class="badge out">Out of Stock</span>' : "";
         const statusBadge =
             st === "out"
               ? '<span class="badge out">Out of Stock</span>'

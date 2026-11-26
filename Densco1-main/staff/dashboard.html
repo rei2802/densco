@@ -73,6 +73,7 @@
         const k = [
           kpiLink("Pending orders", ORD ? ORD.pending : dash, "orders.php", "Waiting for confirmation"),
           kpiLink("Active orders", ORD ? ORD.active : dash, "orders.php", "Pending, confirmed or shipped"),
+          kpiLink("Cancelled Orders", ORD ? ORD.cancelled : dash, "orders.php"),
           kpiLink("Products", INV ? INV.total + " items" : dash, "inventory.php"),
           kpiLink("Low stock alerts", INV && INV.low_items ? INV.low_items.length : dash, "inventory.php", "Low or out of stock"),
         ];

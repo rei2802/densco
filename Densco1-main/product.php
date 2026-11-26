@@ -7,7 +7,7 @@ if ($conn->query("SHOW COLUMNS FROM products LIKE 'supplier'")->num_rows === 0) 
 }
 
 $products = [];
-$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path, availability_status, supplier FROM products WHERE hidden = 0");
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path, supplier FROM products WHERE hidden = 0");
 while ($row = $res->fetch_assoc()) {
     $products[] = [
         "id"    => (int)$row["product_id"],
@@ -17,7 +17,6 @@ while ($row = $res->fetch_assoc()) {
         "stock" => (int)$row["stock_quantity"],
         "desc"  => $row["description"],
         "image" => $row["image_path"] ?: null,
-        "avail" => $row["availability_status"] ?: "in_stock",
         "supplier" => $row["supplier"] ?: "Densco",
     ];
 }
@@ -59,7 +58,7 @@ while ($row = $res->fetch_assoc()) {
       document.getElementById("crumbName").textContent = p.name;
       document.title = p.name + " — Densco Health Products";
 
-      const B = DHP.biz();
+      const orderable = DHP.canOrder(p);
       let qty = 1;
 
       box.className = "card pd";
@@ -74,14 +73,16 @@ while ($row = $res->fetch_assoc()) {
           `<div class="pcat">${p.cat}</div>` +
           `<h1>${DHP.esc(p.name)}</h1>` +
           `<span class="price">${DHP.peso(p.price)}</span>` +
-          `<div class="stock ${DHP.shopState(p)}">${DHP.shopStateLabel(p)}</div>` +
+          `<div class="stock ${DHP.state(p)}">${DHP.stateLabel(p)}</div>` +
           `<p class="pd-desc">${DHP.esc(p.desc)}</p>` +
           `<div class="flex" style="margin-bottom:14px"><b>Supplier:</b><span>${DHP.esc(p.supplier || "Densco")}</span></div>` +
-          `<div class="flex"><b>Quantity</b><div class="qty"><button id="m">−</button><input id="q" type="number" inputmode="numeric" min="1" max="${Math.max(1, p.stock)}" step="1" value="1" aria-label="Quantity" ${DHP.canOrder(p) ? "" : "disabled"}><button id="pl">+</button></div></div>` +
-          `<p class="qty-msg" id="qtyMsg" role="alert"></p>` +
+          (orderable ? `<div class="flex"><b>Quantity</b><div class="qty"><button id="m">−</button><input id="q" type="number" inputmode="numeric" min="1" max="${p.stock}" step="1" value="1" aria-label="Quantity"><button id="pl">+</button></div></div>` +
+          `<p class="qty-msg" id="qtyMsg" role="alert"></p>` : "") +
           `<div class="flex mt">` +
-            `<button class="btn btn-red btn-lg" id="now" ${DHP.canOrder(p) ? "" : "disabled"}>Order Now</button>` +
-            `<button class="btn btn-line btn-lg" id="add" ${DHP.canOrder(p) ? "" : "disabled"}>Add to Cart</button>` +
+            (orderable
+              ? `<button class="btn btn-red btn-lg" id="now">Order Now</button>`
+              : `<button class="btn btn-out-of-stock btn-lg" disabled>Out of Stock</button>`) +
+            `<button class="btn btn-line btn-lg" id="add"${orderable ? "" : " disabled"}>Add to Cart</button>` +
           `</div>` +
           `<p class="muted sm mt">Pickup at our Quezon City warehouse or delivery in Metro Manila (1 to 2 days). Pay by GCash / QR PH or cash.</p>` +
         `</div>`;
@@ -116,13 +117,6 @@ while ($row = $res->fetch_assoc()) {
         qMsg.textContent = msg;
       };
 
-      document.getElementById("m").onclick = () => setQty(qty - 1);
-      document.getElementById("pl").onclick = () => setQty(qty + 1);
-      qEl.addEventListener("change", () => setQty(qEl.valueAsNumber, qEl.value));
-      qEl.addEventListener("keydown", (e) => {
-        if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault();
-      });
-
       const buy = (go) => {
         if (!DHP.user()) {
           location.href = "login.php?next=" + encodeURIComponent("product.php?id=" + p.id);
@@ -135,8 +129,16 @@ while ($row = $res->fetch_assoc()) {
         else DHP.cartNotice(p.id, qty, added);
       };
 
-      document.getElementById("add").onclick = () => buy(false);
-      document.getElementById("now").onclick = () => buy(true);
+      if (orderable) {
+        document.getElementById("m").onclick = () => setQty(qty - 1);
+        document.getElementById("pl").onclick = () => setQty(qty + 1);
+        qEl.addEventListener("change", () => setQty(qEl.valueAsNumber, qEl.value));
+        qEl.addEventListener("keydown", (e) => {
+          if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault();
+        });
+        document.getElementById("add").onclick = () => buy(false);
+        document.getElementById("now").onclick = () => buy(true);
+      }
     }
   </script>
 </body>

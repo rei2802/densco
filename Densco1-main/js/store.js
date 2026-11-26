@@ -169,32 +169,15 @@
   D.stateLabel = function (p) {
     var s = D.state(p);
     return s === "out"
-      ? "Out of stock"
+      ? "Out of Stock"
       : s === "low"
         ? p.stock + " units left"
         : p.stock + " units available";
   };
 
-  // Manual stock status (set by Admin/Owner/Inventory Staff in the Inventory
-  // page), independent of the quantity-based state above. A product can have
-  // units on hand and still be marked "Not Available" (on hold, recalled,
-  // etc.) — this always wins over the quantity-derived state on the shop.
-  D.isAvailable = function (p) {
-    return p.avail !== "not_available";
-  };
-  // "Shop state/label": what customers should actually see on catalog.php
-  // and product.php. Falls back to the quantity-based state/label when the
-  // product hasn't been marked unavailable.
-  D.shopState = function (p) {
-    return D.isAvailable(p) ? D.state(p) : "unavailable";
-  };
-  D.shopStateLabel = function (p) {
-    return D.isAvailable(p) ? D.stateLabel(p) : "Not Available";
-  };
-  // Whether the customer can actually buy it: both manually available AND
-  // in stock.
+  // The storefront and Staff Inventory use the quantity on hand.
   D.canOrder = function (p) {
-    return D.isAvailable(p) && p.stock > 0;
+    return p.stock > 0;
   };
 
   // Best-Selling Products: ranked by units actually sold (order_items),

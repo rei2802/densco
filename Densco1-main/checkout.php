@@ -37,10 +37,11 @@ try {
     $reference   = normalize_reference_number($data["reference_number"] ?? "");
 
     // Phone validation
+    if ($phone === "") {
+        throw new Exception("Enter a contact phone number.");
+    }
     if (!preg_match('/^09\d{9}$/', $phone)) {
-        throw new Exception(
-            "Invalid phone number. Please enter an 11-digit mobile number starting with 09."
-        );
+        throw new Exception("Enter a valid 11-digit mobile number starting with 09.");
     }
 
     // Basic validation

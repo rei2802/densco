@@ -43,6 +43,7 @@ try {
             'active'        => $count['pending'] + $count['confirmed'] + $count['shipped'],
             'pending'       => $count['pending'],
             'completed'     => $count['completed'],
+            'cancelled'     => $count['cancelled'],
             'pending_list'  => array_slice($pending, 0, 5),
             'recent'        => array_slice($all, 0, 4),
         ];
@@ -108,43 +109,32 @@ try {
       <main>
         <div class="page-head">
           <h1>Order management</h1>
-          <p class="muted">Verify payment proofs and update fulfillment status.</p>
+          <p class="muted">Review payment references and update fulfillment status.</p>
         </div>
 
         <div class="toolbar">
           <input id="q" type="search" placeholder="Search order ID or customer" />
         </div>
 
-        <div class="card flush">
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th>Order</th>
-                <th>Customer</th>
-                <th>Date</th>
-                <th>Items</th>
-                <th>Total</th>
-                <th>Fulfillment</th>
-                <th>Payment</th>
-                <th>Proof</th>
-                <th>Reference #</th>
-                <th>Status</th>
+        <div class="card flush order-list">
+          <table class="tbl orders-table" role="table">
+            <thead role="rowgroup">
+              <tr role="row">
+                <th scope="col" role="columnheader">Order</th>
+                <th scope="col" role="columnheader">Customer</th>
+                <th scope="col" role="columnheader">Date</th>
+                <th scope="col" role="columnheader">Items</th>
+                <th scope="col" role="columnheader">Total</th>
+                <th scope="col" role="columnheader">Fulfillment</th>
+                <th scope="col" role="columnheader">Payment</th>
+                <th scope="col" role="columnheader">Reference #</th>
+                <th scope="col" role="columnheader">Status</th>
               </tr>
             </thead>
-            <tbody id="rows"></tbody>
+            <tbody id="rows" role="rowgroup"></tbody>
           </table>
         </div>
 
-        <div class="modal" id="proofModal">
-          <div class="modal-box">
-            <div class="modal-head">
-              <h3 id="proofTitle">Payment proof</h3>
-              <button class="modal-x" data-close>&times;</button>
-            </div>
-            <div class="proof" id="proofBody" style="height:auto;min-height:200px;overflow:hidden"></div>
-            <button class="btn btn-line" data-close>Close</button>
-          </div>
-        </div>
       </main>
     </div>
   </div>
@@ -163,10 +153,6 @@ try {
     }
 
     function renderRow(o) {
-      const proofCell = o.proof
-        ? `<button class="link" data-proof="${o.oid}">View proof</button>`
-        : '<span class="muted sm">N/A</span>';
-
       const shippedLabel = o.fulfillment === "Store Pickup" ? "Ready for pickup" : "Shipped";
 
       // A cancelled order is final (its stock was already returned), so it is shown
@@ -174,12 +160,12 @@ try {
       let statusSelect;
       if (o.status === "cancelled") {
         statusSelect =
-          `<select class="status-sel st-cancelled" data-status="${o.oid}" disabled title="Cancelled orders can't be changed">` +
+          `<select class="status-sel st-cancelled" data-status="${o.oid}" aria-label="Status for ${DHP.esc(o.id)}" disabled title="Cancelled orders can't be changed">` +
           statusOption("cancelled", "Cancelled", o.status) +
           `</select>`;
       } else {
         statusSelect =
-          `<select class="status-sel st-${o.status}" data-status="${o.oid}">` +
+          `<select class="status-sel st-${o.status}" data-status="${o.oid}" aria-label="Status for ${DHP.esc(o.id)}">` +
           statusOption("pending", "Pending", o.status) +
           (o.status === "pending" ? statusOption("cancelled", "Cancelled", o.status) : "") +
           statusOption("confirmed", "Confirmed", o.status) +
@@ -194,17 +180,16 @@ try {
         (contact ? `<br><span class="muted sm">${contact}</span>` : "");
 
       return (
-        `<tr>` +
-        `<td><strong>${DHP.esc(o.id)}</strong></td>` +
-        `<td>${DHP.esc(o.customer)}</td>` +
-        `<td>${DHP.esc(o.date)}</td>` +
-        `<td>${DHP.esc(o.summary)}</td>` +
-        `<td>${DHP.peso(o.total)}</td>` +
-        `<td>${fulfillCell}</td>` +
-        `<td>${DHP.esc(o.payment)}</td>` +
-        `<td>${proofCell}</td>` +
-        `<td>${o.reference_number ? DHP.esc(o.reference_number) : '<span class="muted sm">N/A</span>'}</td>` +
-        `<td>${statusSelect}` +
+        `<tr role="row">` +
+        `<td role="cell" data-label="Order"><strong>${DHP.esc(o.id)}</strong></td>` +
+        `<td role="cell" data-label="Customer">${DHP.esc(o.customer)}</td>` +
+        `<td role="cell" data-label="Date">${DHP.esc(o.date)}</td>` +
+        `<td role="cell" data-label="Items">${DHP.esc(o.summary)}</td>` +
+        `<td role="cell" data-label="Total">${DHP.peso(o.total)}</td>` +
+        `<td role="cell" data-label="Fulfillment">${fulfillCell}</td>` +
+        `<td role="cell" data-label="Payment">${DHP.esc(o.payment)}</td>` +
+        `<td role="cell" data-label="Reference #">${o.reference_number ? DHP.esc(o.reference_number) : '<span class="muted sm">N/A</span>'}</td>` +
+        `<td role="cell" data-label="Status">${statusSelect}` +
           (o.status === "cancelled" && o.cancel_reason
             ? `<div class="muted sm" style="margin-top:6px;max-width:220px">Reason: ${DHP.esc(o.cancel_reason)}</div>`
             : "") +
@@ -215,7 +200,7 @@ try {
 
     function render() {
       if (!loaded) {
-        $("rows").innerHTML = '<tr><td colspan="10"><div class="empty">Loading orders...</div></td></tr>';
+        $("rows").innerHTML = '<tr role="row"><td role="cell" colspan="9"><div class="empty">Loading orders...</div></td></tr>';
         return;
       }
       const t = term.toLowerCase();
@@ -225,7 +210,7 @@ try {
 
       $("rows").innerHTML = O.length
         ? O.map(renderRow).join("")
-        : '<tr><td colspan="10"><div class="empty">' +
+        : '<tr role="row"><td role="cell" colspan="9"><div class="empty">' +
           (ORDERS.length ? "No orders match your search." : "No orders yet.") +
           "</div></td></tr>";
     }
@@ -248,34 +233,13 @@ try {
         })
         .catch((err) => {
           $("rows").innerHTML =
-            '<tr><td colspan="10"><div class="empty">Could not load orders. Please refresh.</div></td></tr>';
+            '<tr role="row"><td role="cell" colspan="9"><div class="empty">Could not load orders. Please refresh.</div></td></tr>';
         });
     }
 
     $("q").addEventListener("input", (e) => {
       term = e.target.value;
       render();
-    });
-
-    $("rows").addEventListener("click", (e) => {
-      const b = e.target.closest("[data-proof]");
-      if (!b) return;
-
-      const o = ORDERS.find((x) => String(x.oid) === b.dataset.proof);
-      if (!o) return;
-      $("proofTitle").textContent = "Payment proof, " + o.id;
-
-      // proof is now a Cloudinary secure_url. Most uploads are images, but
-      // cart.php's #proof input also accepts PDFs, which can't render in an <img>.
-      const isPdf = /\.pdf(\?|$)/i.test(o.proof || "");
-
-      $("proofBody").innerHTML = isPdf
-        ? `<a href="${DHP.esc(o.proof)}" target="_blank" rel="noopener">Open the uploaded PDF</a>`
-        : `<a href="${DHP.esc(o.proof)}" target="_blank" rel="noopener">` +
-            `<img src="${DHP.esc(o.proof)}" alt="Payment proof" style="display:block;max-width:100%;max-height:60vh;margin:0 auto;object-fit:contain;border-radius:inherit">` +
-          `</a>`;
-
-      $("proofModal").classList.add("open");
     });
 
     function saveStatus(oid, status) {

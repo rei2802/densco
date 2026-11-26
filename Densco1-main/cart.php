@@ -278,10 +278,13 @@ while ($row = $res->fetch_assoc()) {
       }
 
       const phone = $("phone").value.trim();
-
+      if (!phone) {
+        err.textContent = "Enter a contact phone number.";
+        return;
+      }
       if (!/^09\d{9}$/.test(phone)) {
-          err.textContent = "Enter a valid 11-digit mobile number starting with 09.";
-          return;
+        err.textContent = "Enter a valid 11-digit mobile number starting with 09.";
+        return;
       }
 
       const ref = $("ref").value.replace(/\s+/g, "");

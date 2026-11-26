@@ -4,7 +4,7 @@ require_once 'config.php';
 // Fetch all products from the database and shape them to match
 // the {id, name, cat, price, stock, desc} shape the front-end JS expects.
 $products = [];
-$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path, availability_status FROM products WHERE hidden = 0");
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path FROM products WHERE hidden = 0");
 while ($row = $res->fetch_assoc()) {
     $products[] = [
         "id"    => (int)$row["product_id"],
@@ -14,7 +14,6 @@ while ($row = $res->fetch_assoc()) {
         "stock" => (int)$row["stock_quantity"],
         "desc"  => $row["description"],
         "image" => $row["image_path"] ?: null,
-        "avail" => $row["availability_status"] ?: "in_stock",
         "sold"  => 0,
     ];
 }
@@ -83,7 +82,7 @@ unset($p);
         <div class="pgrid" id="grid"></div>
 
         <section id="soldOutSection" class="soldout-section hide">
-          <h2 class="sec">Sold Out</h2>
+          <h2 class="sec">Out of Stock</h2>
           <div class="pgrid" id="soldOutGrid"></div>
         </section>
       </section>
@@ -121,7 +120,7 @@ unset($p);
       return `<button class="${c[0] === cat ? "on" : ""}" data-cat="${c[0]}"><span>${c[1]}</span><span>${c[2]}</span></button>`;
     }
     function isSoldOut(p) {
-      return p.stock <= 0 || /out|sold/i.test(p.avail || "");
+      return !DHP.canOrder(p);
     }
 
         function renderProductCard(p) {
@@ -136,10 +135,10 @@ unset($p);
               `<div class="pbody">` +
                 `<div class="pcat">${p.cat}</div>` +
                 `<a class="pname" href="product.php?id=${p.id}">${DHP.esc(p.name)}</a>` +
-                `<div class="stock ${DHP.shopState(p)}">${soldOut ? "Sold Out" : DHP.shopStateLabel(p)}</div>` +
+                `<div class="stock ${DHP.state(p)}">${DHP.stateLabel(p)}</div>` +
                 `<div class="pfoot">` +
                   `<span class="price">${DHP.peso(p.price)}</span>` +
-                  `<button class="btn btn-red btn-sm" data-add="${p.id}" ${!soldOut && DHP.canOrder(p) ? "" : "disabled"}>${soldOut ? "Sold Out" : "Add to Cart"}</button>` +
+                  `<button class="btn ${soldOut ? "btn-out-of-stock" : "btn-red"} btn-sm" ${soldOut ? "disabled" : `data-add="${p.id}"`}>${soldOut ? "Out of Stock" : "Add to Cart"}</button>` +
                 `</div>` +
               `</div>` +
             `</article>`
@@ -183,12 +182,12 @@ unset($p);
       const S = sorted(matches.filter(isSoldOut));
 
       $("count").textContent = L.length + " product" + (L.length === 1 ? "" : "s") +
-        (S.length ? " · " + S.length + " sold out" : "");
+        (S.length ? " · " + S.length + " out of stock" : "");
 
       $("grid").innerHTML = L.length
         ? L.map(renderProductCard).join("")
         : matches.length
-          ? '<div class="card empty" style="grid-column:1/-1">Everything matching your search is currently sold out.</div>'
+          ? '<div class="card empty" style="grid-column:1/-1">Everything matching your search is currently out of stock.</div>'
           : '<div class="card empty" style="grid-column:1/-1">No products match your search. Try another name or category.</div>';
 
       $("soldOutSection").classList.toggle("hide", !S.length);

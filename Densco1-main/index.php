@@ -106,7 +106,7 @@ unset($p);
             `<div class="pbody">` +
               `<div class="pcat">${p.cat}</div>` +
               `<a class="pname" href="product.php?id=${p.id}">${DHP.esc(p.name)}</a>` +
-              `<div class="stock ${DHP.shopState(p)}">${DHP.shopStateLabel(p)}</div>` +
+              `<div class="stock ${DHP.state(p)}">${DHP.stateLabel(p)}</div>` +
               `<div class="pfoot">` +
                 `<span class="price">${DHP.peso(p.price)}</span>` +
                 `<button class="btn btn-red btn-sm" data-add="${p.id}" ${DHP.canOrder(p) ? "" : "disabled"}>Add to Cart</button>` +
