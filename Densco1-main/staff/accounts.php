@@ -91,14 +91,14 @@ function get_staff($conn, $id) {
     return $row;
 }
 
-$role = $_SESSION['staff_role'] ?? null;
 $myId = (int)($_SESSION['staff_id'] ?? 0);
 
-if (!$role) json_out(401, ['success' => false, 'error' => 'Please log in again.']);
-if (!in_array($role, ['owner', 'admin'], true)) json_out(403, ['success' => false, 'error' => 'Not allowed.']);
+if (!$myId) json_out(401, ['success' => false, 'error' => 'Please log in again.']);
 
 try {
     require_once '../config.php';
+    require_once __DIR__ . '/../staff_session_lib.php';
+    $role = require_current_staff($conn, true, ['owner', 'admin']);
 
     // Admin-submitted changes waiting for the Owner's decision
     $conn->query("CREATE TABLE IF NOT EXISTS staff_change_requests (

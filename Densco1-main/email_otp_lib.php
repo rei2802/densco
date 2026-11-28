@@ -97,7 +97,7 @@ function otp_wait_seconds(mysqli $conn, $email) {
 }
 
 // Emails the code. Returns true if the email provider accepted it.
-function otp_send_email($email, $name, $code, $forExistingAccount = false) {
+function otp_send_email($email, $name, $code, $forExistingAccount = false, $emailChange = false) {
     $mins = OTP_MINUTES;
     $intro = $forExistingAccount
         ? 'We now verify every email address. Use this code to verify yours and log in to your Densco account:'
@@ -105,6 +105,10 @@ function otp_send_email($email, $name, $code, $forExistingAccount = false) {
     $ignore = $forExistingAccount
         ? 'If you did not try to log in, you can ignore this email.'
         : 'If you did not try to create an account, you can ignore this email.';
+    if ($emailChange) {
+        $intro = 'Use this code to confirm the new email address for your Densco account:';
+        $ignore = 'If you did not request an email change, you can ignore this email.';
+    }
     $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
     $subject = "Your Densco verification code: $code";
     $text = "Hello $name,\r\n\r\nYour Densco Health Products verification code is: $code\r\n\r\n"

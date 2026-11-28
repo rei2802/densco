@@ -46,8 +46,21 @@
             <input id="pAddress" maxlength="255" placeholder="Street, barangay, city, province" autocomplete="street-address">
           </div>
         </div>
+        <div class="field hide" id="emailPasswordField">
+          <label for="emailCurrentPassword">Current password to change your email</label>
+          <input id="emailCurrentPassword" type="password" autocomplete="current-password">
+        </div>
         <p class="err" id="infoMsg" role="status"></p>
         <button class="btn btn-red" type="submit" id="infoSave">Save changes</button>
+      </form>
+      <form id="emailVerifyForm" class="mt hide">
+        <p id="emailVerifyHint"></p>
+        <div class="field">
+          <label for="emailVerifyCode">Verification code</label>
+          <input id="emailVerifyCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required>
+        </div>
+        <p class="err" id="emailVerifyMsg" role="status"></p>
+        <button class="btn btn-red" type="submit" id="emailVerifySave">Verify new email</button>
       </form>
 
       <h3 style="margin-top:26px">Change password</h3>
@@ -144,6 +157,8 @@
     // ---------- My information ----------
     (function () {
       const $i = (id) => document.getElementById(id);
+      let verifiedEmail = "";
+      let pendingEmail = "";
 
       function say(el, text, ok) {
         el.textContent = text || "";
@@ -151,12 +166,29 @@
       }
 
       function fill(p) {
+        verifiedEmail = p.email || "";
         $i("pName").value = p.name || "";
-        $i("pEmail").value = p.email || "";
+        $i("pEmail").value = verifiedEmail;
         $i("pPhone").value = p.phone || "";
         $i("pAddress").value = p.address || "";
+        showEmailPassword();
       }
 
+      function showEmailPassword() {
+        const changing = $i("pEmail").value.trim().toLowerCase() !== verifiedEmail.toLowerCase();
+        $i("emailPasswordField").classList.toggle("hide", !changing);
+        if (!changing) $i("emailCurrentPassword").value = "";
+      }
+
+      function showEmailVerification(email) {
+        pendingEmail = email || "";
+        $i("emailVerifyForm").classList.toggle("hide", !email);
+        $i("emailVerifyHint").textContent = email ? "Enter the code sent to " + email + ". Your current email stays active until you verify the new one." : "";
+        $i("emailVerifyCode").value = "";
+        say($i("emailVerifyMsg"), "");
+      }
+
+      $i("pEmail").addEventListener("input", showEmailPassword);
       $i("pPhone").addEventListener("input", (e) => {
         e.target.value = e.target.value.replace(/\D/g, "").slice(0, 11);
       });
@@ -164,8 +196,10 @@
       fetch("profile.php", { credentials: "same-origin" })
         .then((r) => r.json())
         .then((d) => {
-          if (d.success) fill(d.profile);
-          else say($i("infoMsg"), d.error || "Could not load your information.");
+          if (d.success) {
+            fill(d.profile);
+            showEmailVerification(d.pending_email);
+          } else say($i("infoMsg"), d.error || "Could not load your information.");
         })
         .catch(() => say($i("infoMsg"), "Could not load your information."));
 
@@ -178,7 +212,7 @@
         }).then((r) => r.json());
       }
 
-      $i("infoForm").addEventListener("submit", (e) => {
+      $i("infoForm").addEventListener("submit", async (e) => {
         e.preventDefault();
         const msg = $i("infoMsg");
         const name = $i("pName").value.trim();
@@ -188,20 +222,48 @@
         if (!name || !email) return say(msg, "Name and email are required.");
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return say(msg, "Enter a valid email address.");
         if (phone && !/^09\d{9}$/.test(phone)) return say(msg, "Enter an 11-digit mobile number starting with 09.");
+        const changing = email.toLowerCase() !== verifiedEmail.toLowerCase();
+        const current = $i("emailCurrentPassword").value;
+        if (changing && !current) return say(msg, "Enter your current password to change your email.");
 
         say(msg, "");
         $i("infoSave").disabled = true;
-        post({ action: "info", name: name, email: email, phone: phone, address: $i("pAddress").value.trim() })
-          .then((d) => {
-            if (!d.success) return say(msg, d.error || "Could not save your changes.");
-            fill(d.profile);
-            DHP.login(d.profile.name);               // keep the name shown across the site
-            document.getElementById("who").textContent = d.profile.name;
-            say(msg, "Your information was saved.", true);
-            DHP.toast("Information updated");
-          })
-          .catch(() => say(msg, "Could not save your changes. Please try again."))
-          .finally(() => { $i("infoSave").disabled = false; });
+        try {
+          if (changing) {
+            const request = await post({ action: "request_email_change", email, current });
+            if (!request.success) return say(msg, request.error || "Could not send a verification code.");
+            showEmailVerification(request.pending_email);
+            $i("emailCurrentPassword").value = "";
+          }
+          const d = await post({ action: "info", name, phone, address: $i("pAddress").value.trim() });
+          if (!d.success) return say(msg, d.error || "Could not save your changes.");
+          fill(d.profile);
+          DHP.login(d.profile.name);
+          $i("who").textContent = d.profile.name;
+          say(msg, changing ? "Profile saved. Verify your new email below." : "Your information was saved.", true);
+          if (changing) $i("emailVerifyCode").focus();
+        } catch (error) {
+          say(msg, "Could not save your changes. Please try again.");
+        } finally {
+          $i("infoSave").disabled = false;
+        }
+      });
+
+      $i("emailVerifyForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const msg = $i("emailVerifyMsg");
+        $i("emailVerifySave").disabled = true;
+        try {
+          const data = await post({ action: "verify_email_change", email: pendingEmail, code: $i("emailVerifyCode").value.trim() });
+          if (!data.success) return say(msg, data.error || "Could not verify your email.");
+          fill(data.profile);
+          showEmailVerification(null);
+          say($i("infoMsg"), "Your new email is verified and ready for sign-in.", true);
+        } catch (error) {
+          say(msg, "Could not verify your email. Please try again.");
+        } finally {
+          $i("emailVerifySave").disabled = false;
+        }
       });
 
       $i("pwForm").addEventListener("submit", (e) => {

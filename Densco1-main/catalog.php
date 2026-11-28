@@ -4,7 +4,7 @@ require_once 'config.php';
 // Fetch all products from the database and shape them to match
 // the {id, name, cat, price, stock, desc} shape the front-end JS expects.
 $products = [];
-$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path FROM products WHERE hidden = 0");
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, availability_status, description, image_path FROM products WHERE hidden = 0");
 while ($row = $res->fetch_assoc()) {
     $products[] = [
         "id"    => (int)$row["product_id"],
@@ -12,6 +12,7 @@ while ($row = $res->fetch_assoc()) {
         "cat"   => $row["category"],
         "price" => (float)$row["price"],
         "stock" => (int)$row["stock_quantity"],
+        "avail"  => $row["availability_status"],
         "desc"  => $row["description"],
         "image" => $row["image_path"] ?: null,
         "sold"  => 0,
@@ -139,7 +140,7 @@ unset($p);
                 `<div class="stock ${DHP.state(p)}">${DHP.stateLabel(p)}</div>` +
                 `<div class="pfoot">` +
                   `<span class="price">${DHP.peso(p.price)}</span>` +
-                  `<button class="btn ${soldOut ? "btn-out-of-stock" : "btn-red"} btn-sm" ${soldOut ? "disabled" : `data-add="${p.id}"`}>${soldOut ? "Out of Stock" : "Add to Cart"}</button>` +
+                  `<button class="btn ${soldOut ? "btn-out-of-stock" : "btn-red"} btn-sm" ${soldOut ? "disabled" : `data-add="${p.id}"`}>${soldOut ? DHP.stateLabel(p) : "Add to Cart"}</button>` +
                 `</div>` +
               `</div>` +
             `</article>`
@@ -183,12 +184,12 @@ unset($p);
       const S = sorted(matches.filter(isSoldOut));
 
       $("count").textContent = L.length + " product" + (L.length === 1 ? "" : "s") +
-        (S.length ? " · " + S.length + " out of stock" : "");
+        (S.length ? " · " + S.length + " unavailable" : "");
 
       $("grid").innerHTML = L.length
         ? L.map(renderProductCard).join("")
         : matches.length
-          ? '<div class="card empty" style="grid-column:1/-1">Everything matching your search is currently out of stock.</div>'
+          ? '<div class="card empty" style="grid-column:1/-1">Everything matching your search is currently unavailable.</div>'
           : '<div class="card empty" style="grid-column:1/-1">No products match your search. Try another name or category.</div>';
 
       $("soldOutSection").classList.toggle("hide", !S.length);

@@ -2,7 +2,7 @@
 require_once 'config.php';
 
 $products = [];
-$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path FROM products WHERE hidden = 0");
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, availability_status, description, image_path FROM products WHERE hidden = 0");
 while ($row = $res->fetch_assoc()) {
     $products[] = [
         "id"    => (int)$row["product_id"],
@@ -10,6 +10,7 @@ while ($row = $res->fetch_assoc()) {
         "cat"   => $row["category"],
         "price" => (float)$row["price"],
         "stock" => (int)$row["stock_quantity"],
+        "avail"  => $row["availability_status"],
         "desc"  => $row["description"],
         "image" => $row["image_path"] ?: null,
     ];
@@ -164,6 +165,7 @@ while ($row = $res->fetch_assoc()) {
     }
 
     function renderLine(l) {
+      const available = DHP.canOrder(l.p);
       const thumb = l.p.image
         ? `<img src="${l.p.image}" alt="" style="display:block;width:100%;height:100%;object-fit:cover">`
         : "Product";
@@ -175,11 +177,11 @@ while ($row = $res->fetch_assoc()) {
             `<div class="ln-name">${DHP.esc(l.p.name)}</div>` +
             `<div class="muted sm">${l.p.cat}, ${DHP.peso(l.p.price)} each</div>` +
           `</div>` +
-          `<div class="qty">` +
+          (available ? `<div class="qty">` +
             `<button data-act="minus" data-id="${l.p.id}">−</button>` +
             `<input class="qty-input" type="number" min="1" max="${l.p.stock}" step="1" value="${l.qty}" data-id="${l.p.id}">` +
             `<button data-act="plus" data-id="${l.p.id}">+</button>` +
-          `</div>` +
+          `</div>` : `<span class="stock out">${DHP.stateLabel(l.p)}</span>`) +
           `<div class="right">` +
             `<b>${DHP.peso(l.p.price * l.qty)}</b><br>` +
             `<button class="link" data-act="rm" data-id="${l.p.id}">Remove</button>` +
@@ -270,6 +272,10 @@ while ($row = $res->fetch_assoc()) {
 
       err.textContent = "";
 
+      if (L.some((line) => !DHP.canOrder(line.p))) {
+        err.textContent = "Remove unavailable products from your cart before placing the order.";
+        return;
+      }
       if (del && !$("addr").value.trim()) {
         err.textContent = "Enter a delivery address.";
         return;

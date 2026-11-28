@@ -95,12 +95,15 @@ try {
         ? (int) round(business_settings($conn)['deliveryFee'] * 100)
         : 0;
     $lines = [];
-    $productLookup = $conn->prepare('SELECT stock_quantity, product_name, price, hidden FROM products WHERE product_id = ? FOR UPDATE');
+    $productLookup = $conn->prepare('SELECT stock_quantity, product_name, price, hidden, availability_status FROM products WHERE product_id = ? FOR UPDATE');
     $productLookup->bind_param('i', $productId);
     foreach ($merged as $productId => $quantity) {
         $productLookup->execute();
         $product = $productLookup->get_result()->fetch_assoc();
         if (!$product || $product['hidden']) throw new DomainException('A product in your cart is no longer available.');
+        if ($product['availability_status'] === 'not_available') {
+            throw new DomainException($product['product_name'] . ' is currently unavailable.');
+        }
         if ((int) $product['stock_quantity'] < $quantity) {
             throw new DomainException('Not enough stock for ' . $product['product_name'] . ' (only ' . max(0, (int) $product['stock_quantity']) . ' left).');
         }

@@ -154,13 +154,14 @@
     put("denscoProducts", p);
   };
   D.state = function (p) {
-    return p.stock <= 0
+    return !D.canOrder(p)
       ? "out"
       : p.stock <= D.settings().lowStock
         ? "low"
         : "in";
   };
   D.stateLabel = function (p) {
+    if (p.avail === "not_available") return "Not available";
     var s = D.state(p);
     return s === "out"
       ? "Out of Stock"
@@ -169,9 +170,8 @@
         : p.stock + " units available";
   };
 
-  // The storefront and Staff Inventory use the quantity on hand.
   D.canOrder = function (p) {
-    return p.stock > 0;
+    return p.avail !== "not_available" && p.stock > 0;
   };
 
   // Best-Selling Products: ranked by units actually sold (order_items),
@@ -213,7 +213,7 @@
       p = D.products().filter(function (x) {
         return x.id === id;
       })[0],
-      max = p && typeof p.stock === "number" ? Math.max(0, p.stock) : Infinity,
+      max = p && D.canOrder(p) ? p.stock : 0,
       have = f ? f.qty : 0,
       next = Math.min(have + q, max),
       added = Math.max(0, next - have);

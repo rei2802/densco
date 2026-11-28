@@ -2,7 +2,7 @@
 require_once 'config.php';
 
 $products = [];
-$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path FROM products WHERE hidden = 0");
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, availability_status, description, image_path FROM products WHERE hidden = 0");
 while ($row = $res->fetch_assoc()) {
     $products[] = [
         "id"    => (int)$row["product_id"],
@@ -10,6 +10,7 @@ while ($row = $res->fetch_assoc()) {
         "cat"   => $row["category"],
         "price" => (float)$row["price"],
         "stock" => (int)$row["stock_quantity"],
+        "avail"  => $row["availability_status"],
         "desc"  => $row["description"],
         "image" => $row["image_path"] ?: null,
         "sold"  => 0,
@@ -110,7 +111,7 @@ unset($p);
               `<div class="stock ${DHP.state(p)}">${DHP.stateLabel(p)}</div>` +
               `<div class="pfoot">` +
                 `<span class="price">${DHP.peso(p.price)}</span>` +
-                `<button class="btn btn-red btn-sm" data-add="${p.id}" ${DHP.canOrder(p) ? "" : "disabled"}>Add to Cart</button>` +
+                `<button class="btn btn-red btn-sm" data-add="${p.id}" ${DHP.canOrder(p) ? "" : "disabled"}>${DHP.canOrder(p) ? "Add to Cart" : DHP.stateLabel(p)}</button>` +
               `</div>` +
             `</div>` +
           `</article>`

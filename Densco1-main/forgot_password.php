@@ -43,10 +43,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $token = bin2hex(random_bytes(32));
                 $hash  = hash('sha256', $token);
                 $mins  = RESET_TOKEN_MINUTES;
-                $ins = $conn->prepare("INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?, ?, NOW() + INTERVAL $mins MINUTE)");
-                $ins->bind_param("is", $uid, $hash);
+                $ins = $conn->prepare(
+                    "INSERT INTO password_resets (user_id, token_hash, expires_at)
+                     SELECT user_id, ?, NOW() + INTERVAL $mins MINUTE FROM users WHERE user_id = ? AND email = ?"
+                );
+                $ins->bind_param("sis", $hash, $uid, $email);
                 $ins->execute();
+                $created = $ins->affected_rows === 1;
                 $ins->close();
+                if (!$created) {
+                    echo json_encode($reply);
+                    exit;
+                }
 
                 $link = $origin . '/reset_password.php?token=' . $token;
                 $body = "Hello " . $user['full_name'] . ",\r\n\r\n"

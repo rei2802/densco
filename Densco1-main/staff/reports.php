@@ -19,19 +19,16 @@ function json_out($code, $payload) {
 }
 
 $isApi = isset($_GET['api']);
-$role  = $_SESSION['staff_role'] ?? null;
 $myId  = (int)($_SESSION['staff_id'] ?? 0);
 
-if (!$role) {
+if (!$myId) {
     if ($isApi) json_out(401, ['success' => false, 'error' => 'Please log in again.']);
     header('Location: login.php');
     exit;
 }
-if (!in_array($role, ['owner', 'admin', 'inventory'], true)) {
-    if ($isApi) json_out(403, ['success' => false, 'error' => 'Not allowed.']);
-    header('Location: dashboard.html');
-    exit;
-}
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../staff_session_lib.php';
+$role = require_current_staff($conn, $isApi);
 
 const REPORT_TYPES    = ['General', 'Inventory', 'Restock', 'Sales', 'Orders', 'Customer Inquiries', 'Incident', 'Other'];
 const MAX_IMAGES      = 10;
@@ -151,7 +148,6 @@ function valid_date($s) {
 if ($isApi) {
     $inTx = false;
     try {
-        require_once '../config.php';
         require_once '../reports_lib.php';
         ensure_tables($conn);
         $action = $_GET['action'] ?? '';

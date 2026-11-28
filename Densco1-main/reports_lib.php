@@ -336,8 +336,8 @@ function rp_inventory_report(mysqli $conn, $from, $to, $low, $levels = true) {
             $restockRows[] = [rp_day($r['restock_date']), $r['product_name'] ?? 'Removed product', $r['supplier_name'], rp_int($q)];
         }
         $stmt->close();
-    } catch (Throwable $ex) {
-        $restocked = []; $restockRows = []; $restockUnits = 0;
+    } catch (mysqli_sql_exception $ex) {
+        if ($ex->getCode() !== 1146) throw $ex;
     }
 
     // Current stock

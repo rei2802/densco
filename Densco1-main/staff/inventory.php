@@ -2,6 +2,11 @@
 require_once '../config.php';
 require_once __DIR__ . '/../config/cloudinary.php';
 require_once __DIR__ . '/../settings_lib.php';
+require_once __DIR__ . '/../staff_session_lib.php';
+require_once __DIR__ . '/../restock_lib.php';
+
+session_start();
+$staffRole = current_staff_role($conn);
 
 // Suppliers a product can be sourced from, and the default for every product.
 // The products.supplier column is added automatically the first time this page runs
@@ -55,7 +60,6 @@ function handleProductImageUpload($fileKey)
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['summary'])) {
     header('Content-Type: application/json');
     header('Cache-Control: no-store');
-    if (session_status() === PHP_SESSION_NONE) session_start();
 
     $res = $conn->query("SELECT COUNT(*) AS c FROM products WHERE hidden = 0");
     $row = $res->fetch_assoc();
@@ -63,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['summary'])) {
 
     // Low / out of stock list (staff only). Same rule as the Inventory page:
     // 0 = out of stock, up to the low-stock level from Settings = low stock.
-    if (!empty($_SESSION['staff_role'])) {
+    if ($staffRole) {
         $low = business_settings($conn)['lowStock'];
         $out['low'] = $low;
         $stmt = $conn->prepare(
@@ -95,8 +99,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['summary'])) {
 // staff session with the Owner, Administrator or Inventory Staff role. The
 // browser-side redirect in js/staff-portal.js is only a convenience.
 // ============================================
-if (session_status() === PHP_SESSION_NONE) session_start();
-$staffRole = $_SESSION['staff_role'] ?? null;
 $isApiRequest = $_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['json']);
 if (!$staffRole) {
     if ($isApiRequest) {
@@ -106,16 +108,6 @@ if (!$staffRole) {
         exit;
     }
     header('Location: login.php');
-    exit;
-}
-if (!in_array($staffRole, ['owner', 'admin', 'inventory'], true)) {
-    if ($isApiRequest) {
-        http_response_code(403);
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'error' => 'Not allowed.']);
-        exit;
-    }
-    header('Location: dashboard.html');
     exit;
 }
 
@@ -199,13 +191,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'adjust') {
         $id = intval($data['id'] ?? 0);
         $delta = intval($data['delta'] ?? 0);
-
-        // GREATEST(...,0) stops stock from going negative
-        $stmt = $conn->prepare("UPDATE products SET stock_quantity = LEAST(GREATEST(stock_quantity + ?, 0), ?) WHERE product_id = ?");
-        $stmt->bind_param("iii", $delta, $MAX_STOCK, $id);
-        $stmt->execute();
-        echo json_encode(['success' => $stmt->affected_rows >= 0]);
-        $stmt->close();
+        $inTransaction = false;
+        try {
+            if ($delta > 0) ensure_restocks_table($conn);
+            $conn->begin_transaction();
+            $inTransaction = true;
+            $product = $conn->execute_query(
+                'SELECT stock_quantity, supplier FROM products WHERE product_id = ? FOR UPDATE', [$id]
+            )->fetch_assoc();
+            if (!$product) throw new DomainException('Product not found.');
+            $previous = (int) $product['stock_quantity'];
+            $stock = (int) min($MAX_STOCK, max(0, $previous + $delta));
+            $conn->execute_query('UPDATE products SET stock_quantity = ? WHERE product_id = ?', [$stock, $id]);
+            if ($stock > $previous) {
+                record_inventory_restock($conn, $id, $stock - $previous, $product['supplier'] ?: $DEFAULT_SUPPLIER, (int) $_SESSION['staff_id']);
+            }
+            $conn->commit();
+            echo json_encode(['success' => true, 'stock' => $stock]);
+        } catch (Throwable $error) {
+            if ($inTransaction) $conn->rollback();
+            if (!($error instanceof DomainException)) error_log('Inventory adjustment: ' . $error->getMessage());
+            echo json_encode(['success' => false, 'error' => $error instanceof DomainException ? $error->getMessage() : 'Could not update stock.']);
+        }
         exit;
     }
 
@@ -227,64 +234,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        // Admins can't edit stock, so the front-end omits it from the payload.
-        // Keep the existing value in that case instead of zeroing it out.
-        // Same goes for availability status when the quick status control
-        // on the row was used instead of this form.
-        $cur = $conn->prepare("SELECT stock_quantity, image_path, availability_status FROM products WHERE product_id = ?");
-        $cur->bind_param("i", $id);
-        $cur->execute();
-        $curRow = $cur->get_result()->fetch_assoc();
-        $cur->close();
-
-        $currentStock = $curRow ? (int)$curRow['stock_quantity'] : 0;
         $addStock = intval($data['add_stock'] ?? 0);
-        // Add Stock only adds: negative numbers are not accepted.
         if ($addStock < 0) {
             echo json_encode(['success' => false, 'error' => 'Add Stock cannot be negative. Enter 0 or a positive number.']);
             exit;
         }
-
-        $stock = $currentStock + $addStock;
-        if ($stock > $MAX_STOCK) {
-            $room = max(0, $MAX_STOCK - $currentStock);
-            echo json_encode(['success' => false, 'error' => 'Stock limit is ' . number_format($MAX_STOCK) . ' units per product. You can add at most ' . number_format($room) . ' more.']);
-            exit;
-        }
-
-        $status = trim($data['status'] ?? '');
-        if (!in_array($status, $ALLOWED_STATUSES, true)) {
-            $status = $curRow ? $curRow['availability_status'] : 'in_stock';
-        }
-
-        $imagePath = handleProductImageUpload('image');
-        if ($imagePath === false) {
-            echo json_encode(['success' => false, 'error' => 'Image upload failed. Use a JPG, JFIF, PNG, WEBP or GIF file (and check the Cloudinary settings).']);
-            exit;
-        }
-        if ($imagePath === null) {
-            if (!empty($data['removeImage'])) {
-                $imagePath = null; // explicitly cleared by the "Remove current photo" checkbox
-            } else {
-                $imagePath = $curRow ? $curRow['image_path'] : null; // keep existing image
-            }
-        }
-
-        // Type string must have exactly as many characters as bound
-        // variables / placeholders below (10 now that supplier and availability_status
-        // was added — a mismatch here throws a fatal mysqli_sql_exception
-        // and crashes every save with a 500).
         $supplier = trim($data['supplier'] ?? '');
         if (!in_array($supplier, $ALLOWED_SUPPLIERS, true)) {
             echo json_encode(['success' => false, 'error' => 'Please choose a supplier from the list.']);
             exit;
         }
 
-        $stmt = $conn->prepare("UPDATE products SET product_name = ?, category = ?, price = ?, stock_quantity = ?, description = ?, hidden = ?, image_path = ?, availability_status = ?, supplier = ? WHERE product_id = ?");
-        $stmt->bind_param("ssdisisssi", $name, $cat, $price, $stock, $desc, $hidden, $imagePath, $status, $supplier, $id);
-        $stmt->execute();
-        echo json_encode(['success' => true]);
-        $stmt->close();
+        // Complete the upload before taking the database lock.
+        $newImage = handleProductImageUpload('image');
+        if ($newImage === false) {
+            echo json_encode(['success' => false, 'error' => 'Image upload failed. Use a JPG, JFIF, PNG, WEBP or GIF file (and check the Cloudinary settings).']);
+            exit;
+        }
+
+        $inTransaction = false;
+        try {
+            if ($addStock > 0) ensure_restocks_table($conn);
+            $conn->begin_transaction();
+            $inTransaction = true;
+            $product = $conn->execute_query(
+                'SELECT stock_quantity, image_path, availability_status FROM products WHERE product_id = ? FOR UPDATE', [$id]
+            )->fetch_assoc();
+            if (!$product) throw new DomainException('Product not found.');
+            $currentStock = (int) $product['stock_quantity'];
+            if ($addStock > 0 && $addStock > $MAX_STOCK - $currentStock) {
+                $room = max(0, $MAX_STOCK - $currentStock);
+                throw new DomainException('Stock limit is ' . number_format($MAX_STOCK) . ' units per product. You can add at most ' . number_format($room) . ' more.');
+            }
+
+            $status = trim($data['status'] ?? '');
+            if (!in_array($status, $ALLOWED_STATUSES, true)) $status = $product['availability_status'];
+            $imagePath = $newImage ?? (!empty($data['removeImage']) ? null : $product['image_path']);
+            $stock = $currentStock + $addStock;
+            $conn->execute_query(
+                'UPDATE products SET product_name = ?, category = ?, price = ?, stock_quantity = ?, description = ?,
+                 hidden = ?, image_path = ?, availability_status = ?, supplier = ? WHERE product_id = ?',
+                [$name, $cat, $price, $stock, $desc, $hidden, $imagePath, $status, $supplier, $id]
+            );
+            if ($addStock > 0) record_inventory_restock($conn, $id, $addStock, $supplier, (int) $_SESSION['staff_id']);
+            $conn->commit();
+            echo json_encode(['success' => true, 'stock' => $stock]);
+        } catch (Throwable $error) {
+            if ($inTransaction) $conn->rollback();
+            if (!($error instanceof DomainException)) error_log('Inventory edit: ' . $error->getMessage());
+            echo json_encode(['success' => false, 'error' => $error instanceof DomainException ? $error->getMessage() : 'Could not save the product.']);
+        }
         exit;
     }
 
@@ -618,12 +617,18 @@ while ($row = $res->fetch_assoc()) {
       if (adj) {
         const id = +adj.dataset.id;
         const delta = +adj.dataset.adj;
-        const P = DHP.products();
-        P.forEach((p) => {
-          if (p.id === id) p.stock = Math.max(0, p.stock + delta);
-        });
-        render(); // optimistic update
-        await api({ action: "adjust", id: id, delta: delta });
+        const product = DHP.products().find((p) => p.id === id);
+        adj.disabled = true;
+        try {
+          const result = await api({ action: "adjust", id, delta });
+          if (!result.success) return DHP.toast(result.error || "Could not update stock.");
+          if (product) product.stock = result.stock;
+          render();
+        } catch (error) {
+          DHP.toast("Could not update stock. Please try again.");
+        } finally {
+          adj.disabled = false;
+        }
         return;
       }
 

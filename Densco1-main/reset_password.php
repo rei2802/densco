@@ -18,6 +18,7 @@ function find_reset(mysqli $conn, $token) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
+    $inTransaction = false;
     try {
         $input = json_decode(file_get_contents('php://input'), true);
         $token = is_array($input) ? ($input['token'] ?? '') : '';
@@ -38,6 +39,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Following the emailed reset link proves the person owns this address.
         require_once 'email_otp_lib.php';
         ensure_verified_column($conn);
+        $conn->begin_transaction();
+        $inTransaction = true;
+        // Serialize reset and email changes on the user row, then check the token again.
+        $user = $conn->execute_query('SELECT user_id FROM users WHERE user_id = ? FOR UPDATE', [$uid])->fetch_assoc();
+        $valid = $user && $conn->execute_query(
+            'SELECT reset_id FROM password_resets WHERE reset_id = ? AND user_id = ? AND expires_at > NOW() FOR UPDATE',
+            [$reset['reset_id'], $uid]
+        )->fetch_assoc();
+        if (!$valid) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'field' => 'form', 'error' => 'This reset link is invalid or has expired. Please request a new one.']);
+            exit;
+        }
         $upd = $conn->prepare("UPDATE users SET password = ?, email_verified_at = COALESCE(email_verified_at, NOW()) WHERE user_id = ?");
         $upd->bind_param("si", $hash, $uid);
         $upd->execute();
@@ -48,9 +62,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $del->bind_param("i", $uid);
         $del->execute();
         $del->close();
+        $conn->commit();
 
         echo json_encode(['success' => true]);
     } catch (Throwable $e) {
+        if ($inTransaction) $conn->rollback();
         error_log('reset_password.php failed: ' . $e->getMessage());
         http_response_code(500);
         echo json_encode(['success' => false, 'field' => 'form', 'error' => 'We could not reset your password right now. Please try again in a moment.']);

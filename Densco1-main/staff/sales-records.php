@@ -10,24 +10,16 @@ function json_out($code, $payload) {
 }
 
 $isApi = isset($_GET['json']);
-$role  = $_SESSION['staff_role'] ?? null;
-
-// Must be logged in as staff (real session, checked on the server)
-if (!$role) {
+if (empty($_SESSION['staff_id'])) {
     if ($isApi) json_out(401, ['success' => false, 'error' => 'Please log in again.']);
     header('Location: login.php');
     exit;
 }
 
-// Only the owner and admin may see sales records
-if (!in_array($role, ['owner', 'admin'], true)) {
-    if ($isApi) json_out(403, ['success' => false, 'error' => 'Not allowed.']);
-    header('Location: dashboard.html');
-    exit;
-}
-
 try {
     require_once '../config.php';
+    require_once __DIR__ . '/../staff_session_lib.php';
+    require_current_staff($conn, $isApi, ['owner', 'admin']);
     require_once '../orders_lib.php';
 
     // A "sale" is a completed, paid transaction — this is the finalized

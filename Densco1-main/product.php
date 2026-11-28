@@ -7,7 +7,7 @@ if ($conn->query("SHOW COLUMNS FROM products LIKE 'supplier'")->num_rows === 0) 
 }
 
 $products = [];
-$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, description, image_path, supplier FROM products WHERE hidden = 0");
+$res = $conn->query("SELECT product_id, product_name, category, price, stock_quantity, availability_status, description, image_path, supplier FROM products WHERE hidden = 0");
 while ($row = $res->fetch_assoc()) {
     $products[] = [
         "id"    => (int)$row["product_id"],
@@ -15,6 +15,7 @@ while ($row = $res->fetch_assoc()) {
         "cat"   => $row["category"],
         "price" => (float)$row["price"],
         "stock" => (int)$row["stock_quantity"],
+        "avail"  => $row["availability_status"],
         "desc"  => $row["description"],
         "image" => $row["image_path"] ?: null,
         "supplier" => $row["supplier"] ?: "Densco",
@@ -82,7 +83,7 @@ while ($row = $res->fetch_assoc()) {
           `<div class="flex mt">` +
             (orderable
               ? `<button class="btn btn-red btn-lg" id="now">Order Now</button>`
-              : `<button class="btn btn-out-of-stock btn-lg" disabled>Out of Stock</button>`) +
+              : `<button class="btn btn-out-of-stock btn-lg" disabled>${DHP.stateLabel(p)}</button>`) +
             `<button class="btn btn-line btn-lg" id="add"${orderable ? "" : " disabled"}>Add to Cart</button>` +
           `</div>` +
           `<p class="muted sm mt">Pickup at our Quezon City warehouse or delivery in Metro Manila (1 to 2 days). Pay by GCash / QR PH or cash.</p>` +
