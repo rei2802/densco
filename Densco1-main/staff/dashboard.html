@@ -53,9 +53,6 @@
           month: "long",
           day: "numeric",
         });
-      // Every number on this page comes from the database (orders.php and
-      // inventory.php summaries). The one exception is "Open inquiries": chat
-      // inquiries are only stored in the browser, so that count is local.
       const $ = (id) => document.getElementById(id);
       const kpiLink = (label, value, href, note) =>
         `<a class="kpi" href="${href}" style="display:block"><small>${label}</small><b>${value}</b>${note ? `<span>${note}</span>` : ""}</a>`;
@@ -67,6 +64,11 @@
 
       let ORD = null;   // orders summary
       let INV = null;   // inventory summary
+      let waitingInquiries = null;
+      document.addEventListener("staff-chat-count", (event) => {
+        waitingInquiries = event.detail;
+        renderKpis();
+      });
 
       function renderKpis() {
         const dash = "-";
@@ -79,9 +81,11 @@
         ];
         if (DHP.role === "owner") {
           k.push(kpiLink("Revenue (completed)", ORD && ORD.revenue !== undefined ? DHP.peso(ORD.revenue) : dash, "sales-records.php"));
-        } else if (DHP.role === "admin") {
-          k.push(kpiLink("Open inquiries", DHP.get("denscoInquiries", []).filter((i) => i.status === "open").length, "inquiries.html"));
-        } else {
+        }
+        if (DHP.staffChat) {
+          k.push(kpiLink("Inquiries awaiting reply", waitingInquiries ?? dash, "inquiries.html"));
+        }
+        if (DHP.role === "inventory") {
           k.push(kpiLink("Needs restocking", INV && INV.low_items ? INV.low_items.length : dash, "inventory.php"));
         }
         $("kpis").innerHTML = k.join("");

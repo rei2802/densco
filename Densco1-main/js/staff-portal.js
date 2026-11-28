@@ -22,7 +22,7 @@
     ["dashboard", "Dashboard", "owner admin inventory"],
     ["orders", "Orders", "owner admin inventory"],
     ["inventory", "Inventory", "owner admin inventory"],
-    ["inquiries", "Inquiries", "admin"],
+    ["inquiries", "Inquiries", "owner admin inventory"],
     ["sales-records", "Sales & Records", "owner admin"],
     ["staff", "Manage Accounts", "owner admin"],
     ["reports", "Reports", "owner admin inventory"],
@@ -126,7 +126,8 @@
       NAV.filter(function (n) {
         return n[2].split(" ").indexOf(role) > -1;
       }).map(function (n) {
-        return '<a href="' + n[0] + ext(n[0]) + '"' + (n[0] === page ? ' class="on"' : "") + ">" + n[1].replace("&", "&amp;") + "</a>";
+        var badge = n[0] === "inquiries" ? ' <span id="staffChatBadge" class="badge pending hide" role="status"></span>' : "";
+        return '<a href="' + n[0] + ext(n[0]) + '"' + (n[0] === page ? ' class="on"' : "") + ">" + n[1].replace("&", "&amp;") + badge + "</a>";
       }).join("") +
     '</nav>' +
     '<div class="side-foot">' +
@@ -153,4 +154,68 @@
   });
 
   D.applyRoles(document);
+
+  var chatBadge = document.getElementById("staffChatBadge");
+  if (chatBadge) {
+    var chatUrl = new URL("../api/staff-chat.php?scope=staff", location.href);
+    var title = document.title;
+    var polling = false;
+    var lastHeartbeat = 0;
+    var notified = null;
+    D.staffChat = async function (params, body) {
+      var url = new URL(chatUrl);
+      Object.keys(params).forEach(function (key) {
+        url.searchParams.set(key, params[key]);
+      });
+      var response = await fetch(url, {
+        method: body ? "POST" : "GET",
+        credentials: "same-origin",
+        headers: body ? { "Content-Type": "application/json" } : {},
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(12000)
+      });
+      var result = await response.json();
+      if (!response.ok) {
+        var error = new Error(result.error || "Staff chat is unavailable.");
+        error.status = response.status;
+        throw error;
+      }
+      return result;
+    };
+    D.staffChatToken = function () {
+      return Array.from(crypto.getRandomValues(new Uint8Array(16)), function (byte) {
+        return byte.toString(16).padStart(2, "0");
+      }).join("");
+    };
+    D.refreshStaffChatBadge = async function () {
+      if (polling) return;
+      polling = true;
+      try {
+        if (!document.hidden && Date.now() - lastHeartbeat >= 30000) {
+          await D.staffChat({}, { action: "presence" });
+          lastHeartbeat = Date.now();
+        }
+        var result = await D.staffChat({ action: "summary" });
+        if (notified !== result.waiting) {
+          notified = result.waiting;
+          chatBadge.classList.toggle("hide", notified === 0);
+          chatBadge.textContent = notified + " waiting";
+          document.title = notified ? "(" + notified + ") " + title : title;
+          document.dispatchEvent(new CustomEvent("staff-chat-count", { detail: notified }));
+        }
+      } catch (error) {
+        if (notified !== null) {
+          notified = null;
+          chatBadge.classList.add("hide");
+          document.title = title;
+          document.dispatchEvent(new CustomEvent("staff-chat-count", { detail: null }));
+        }
+      } finally {
+        polling = false;
+      }
+    };
+    document.addEventListener("visibilitychange", D.refreshStaffChatBadge);
+    setInterval(D.refreshStaffChatBadge, 2000);
+    D.refreshStaffChatBadge();
+  }
 })();

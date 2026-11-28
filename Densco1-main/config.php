@@ -49,6 +49,10 @@ try {
 } catch (mysqli_sql_exception $e) {
     error_log('Densco database connection failed: ' . $e->getMessage());
 
+    if (!empty($throwDatabaseConnectionErrors)) {
+        throw $e;
+    }
+
     die(
         'Unable to connect to the database. Please check your database '
         . 'configuration and ensure MySQL is running.'

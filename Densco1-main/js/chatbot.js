@@ -10,8 +10,7 @@
   "use strict";
 
   var D = window.DHP;
-  var KEY = "denscoInquiries";
-  var POLL = 4000;
+  var POLL = 2000;
 
   // Path to the PHP file, worked out from where THIS script was loaded
   // (<site>/js/chatbot.js -> <site>/api/chatbot.php). It therefore works from
@@ -23,6 +22,7 @@
     } catch (e) {}
     return "/api/chatbot.php";
   })();
+  var STAFF_URL = new URL("staff-chat.php", new URL(API_URL, location.href));
 
   var GREETING =
     "Good day! I am the Densco Assistant. How may I help you with product availability, delivery, payment or your orders?";
@@ -47,13 +47,11 @@
   var who = currentUser();
   var whoKey = userKey(who);
 
-  // Only logged-in customers can reach the staff (admin) chat
+  // The local sign-in state is used for assistant history and copy. PHP authorizes staff chat.
   function isLoggedIn() {
     return whoKey !== GUEST;
   }
   var awaitingProductName = false;
-  var active = null;
-  var seen = 0;
   var busy = false;
 
   // Remembers the last few messages so the AI can follow the conversation
@@ -208,17 +206,6 @@
     return best;
   }
 
-  // Read existing customer inquiries
-  function read() {
-    return D.get(KEY, []);
-  }
-
-  function find(id) {
-    return read().filter(function (item) {
-      return item.id === id;
-    })[0];
-  }
-
   // The built-in answers are English only. If the customer writes in another
   // language (Tagalog, Cebuano, Spanish, Chinese, Arabic, ...), skip them and
   // let Gemini answer in the customer's own language.
@@ -253,15 +240,6 @@
       if (product) {
         return { text: stockReply(product) };
       }
-    }
-
-    // Request to speak to a real person
-    if (/staff|human|agent|person|representative|talk to/.test(text)) {
-      return {
-        text:
-          "Certainly. I am connecting you with a Densco team member, who will reply to you here shortly.",
-        esc: true
-      };
     }
 
     // General product-knowledge questions ("what is a nebulizer?", "what is it used for?")
@@ -411,19 +389,21 @@
         '</div>' +
         '<div class="cb-staffbar" id="cbStaff" hidden>' +
           '<span class="cb-dot"></span>' +
-          '<span>You are chatting with a Densco team member</span>' +
+          '<span id="cbStaffState" role="status"></span>' +
+          '<button type="button" id="cbReopen" hidden>Request staff</button>' +
           '<button type="button" id="cbBack">Back to bot</button>' +
         '</div>' +
         '<div class="cb-msgs" id="cbMsgs">' +
           '<div class="cb-m bot">' + GREETING + '</div>' +
         '</div>' +
+        '<div class="cb-msgs" id="cbStaffMsgs" role="log" aria-label="Staff conversation messages" hidden></div>' +
         '<div class="cb-chips" id="cbChips">' +
           '<button>Check stock</button>' +
           '<button>Delivery and pickup</button>' +
           '<button>Payment options</button>' +
-          '<button>Talk to staff</button>' +
-          '<button>Back to bot</button>' +
+          '<button type="button" id="cbTalk">Talk to staff</button>' +
         '</div>' +
+        '<p id="cbStaffError" role="status" hidden></p>' +
         '<form class="cb-form" id="cbForm">' +
           '<input id="cbIn" placeholder="Type a message" autocomplete="off">' +
           '<button type="button" id="cbMic" class="cb-mic" aria-label="Hold to talk" title="Hold to talk">' +
@@ -449,34 +429,70 @@
   var msgs = document.getElementById("cbMsgs");
   var input = document.getElementById("cbIn");
 
-  // ---- Staff-mode indicator -----------------------------------------
   var staffBar = document.getElementById("cbStaff");
+  var staffState = document.getElementById("cbStaffState");
+  var staffMsgs = document.getElementById("cbStaffMsgs");
+  var staffError = document.getElementById("cbStaffError");
+  var reopen = document.getElementById("cbReopen");
+  var chips = document.getElementById("cbChips");
+  var talk = document.getElementById("cbTalk");
+  var form = document.getElementById("cbForm");
   var sub = document.getElementById("cbSub");
   var SUB_BOT = sub.textContent;
+  var staffThread = null;
+  var staffCursor = 0;
+  var staffPaused = false;
+  var staffAvailable = false;
+  var staffAccess = true;
+  var staffReading = false;
+  var staffSaving = false;
+  var staffVersion = 0;
+  var pendingStaffMessage = null;
 
   // Styles are injected here so no CSS file edit is needed
   // (move them to your stylesheet if you prefer)
   var st = document.createElement("style");
   st.textContent =
     ".cb-staffbar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#e8f7ee;color:#14633a;font-size:13px;border-bottom:1px solid #c6ebd5}" +
-    ".cb-staffbar[hidden]{display:none}" +
+    ".cb-win [hidden]{display:none}" +
     ".cb-staffbar span:nth-child(2){flex:1}" +
     ".cb-staffbar button{border:1px solid #14633a;background:#fff;color:#14633a;border-radius:12px;padding:2px 10px;font-size:12px;cursor:pointer}" +
     ".cb-dot{width:9px;height:9px;border-radius:50%;background:#22c55e;animation:cbPulse 1.5s infinite}" +
     "@keyframes cbPulse{0%,100%{opacity:1}50%{opacity:.35}}" +
-    ".cb-m.staff{border-left:3px solid #22c55e}";
+    ".cb-m.staff{border-left:3px solid #22c55e}" +
+    "#cbStaffError{margin:0;padding:7px 14px;background:#fff4e5;color:#793f00;font-size:13px}";
   document.head.appendChild(st);
 
-  // Show or hide the "talking to staff" indicator based on the active inquiry
+  function staffMode() {
+    return staffThread && !staffPaused;
+  }
+
   function updateStaffIndicator() {
-    var onStaff = !!active;
+    var onStaff = staffMode();
     staffBar.hidden = !onStaff;
-    sub.textContent = onStaff ? "Live chat with our team" : SUB_BOT;
+    staffMsgs.hidden = !onStaff;
+    msgs.hidden = !!onStaff;
+    chips.hidden = !!onStaff;
+    talk.textContent = staffThread ? "View staff conversation" : "Talk to staff";
+    sub.textContent = onStaff ? "Densco staff conversation" : SUB_BOT;
+    var ended = onStaff && staffThread.status === "closed";
+    reopen.hidden = !ended;
+    form.hidden = !!ended;
+    if (onStaff) {
+      staffState.textContent = ended
+        ? "Conversation ended."
+        : staffThread.status === "answered"
+        ? "Staff replied."
+        : staffAvailable
+        ? "Waiting for a staff reply."
+        : "No staff are online. Your message is queued.";
+    }
   }
 
   document.getElementById("cbBack").onclick = function () {
-    send("back to bot");
+    returnToBot();
   };
+  reopen.onclick = function () { sendToStaff("request", "Talk to staff"); };
 
   // ---- Chat storage -------------------------------------------------
   // Logged-in customers: the chat is saved under their account and is still
@@ -486,7 +502,7 @@
     return "denscoChat:" + whoKey;
   }
 
-  // Save everything currently shown in the chat window
+  // Staff history is kept only on the server. Save assistant history and view preference here.
   function save() {
     if (!isLoggedIn()) return;
 
@@ -511,8 +527,7 @@
         JSON.stringify({
           messages: list.slice(-100),
           history: history,
-          active: active,
-          seen: seen
+          staffPaused: staffPaused
         })
       );
     } catch (error) {
@@ -537,8 +552,15 @@
 
   // Load the saved chat of whoever is using the site right now
   function loadChat() {
-    active = null;
-    seen = 0;
+    staffVersion++;
+    staffThread = null;
+    staffCursor = 0;
+    staffPaused = false;
+    staffAvailable = false;
+    staffAccess = true;
+    pendingStaffMessage = null;
+    staffMsgs.replaceChildren();
+    showStaffError("");
     busy = false;
     awaitingProductName = false;
     history = [];
@@ -564,11 +586,7 @@
 
       history = saved.history || [];
 
-      // Reconnect to the staff conversation (logged-in customers only)
-      if (isLoggedIn() && saved.active && find(saved.active)) {
-        active = saved.active;
-        seen = saved.seen || 0;
-      }
+      staffPaused = saved.staffPaused === true;
     } else {
       add(GREETING, "bot", true);
     }
@@ -578,171 +596,215 @@
 
   loadChat();
 
-  // Create a staff inquiry and save it using the existing website storage
-  function escalate(message) {
-    if (!isLoggedIn()) return;
-
-    var all = read();
-
-    // Reuse this customer's existing conversation (newest first) so staff
-    // always see ONE thread per person instead of many separate ones
-    var inquiry = all.filter(function (item) {
-      return userKey(item.customer) === whoKey;
-    })[0];
-
-    var newMessage = {
-      sender: "customer",
-      text: message,
-      time: new Date().toISOString()
-    };
-
-    if (inquiry) {
-      inquiry.messages.push(newMessage);
-      inquiry.question = message;   // list preview shows the latest message
-      inquiry.status = "open";      // flag it as needing a reply again
-    } else {
-      inquiry = {
-        id: "INQ-" + Date.now(),
-        customer: who,
-        question: message,
-        status: "open",
-        messages: [newMessage]
-      };
-      all.unshift(inquiry);
-    }
-
-    D.put(KEY, all);
-
-    active = inquiry.id;
-    seen = inquiry.messages.length;
-    updateStaffIndicator();
-    save();
+  function showStaffError(message) {
+    staffError.textContent = message;
+    staffError.hidden = !message;
   }
 
-  // Send a customer message
-  function send(message) {
-    if (busy) return;
-
-    add(message, "user");
-
-    // Let the customer leave staff mode and return to the assistant
-    if (/^(back to bot|bot|assistant)$/i.test(message.trim())) {
-      active = null;
-      updateStaffIndicator();
-      add("Welcome back. This is the Densco Assistant. How may I help you?", "bot");
-      return;
+  async function staffRequest(body) {
+    var url = new URL(STAFF_URL);
+    url.searchParams.set("after", staffCursor);
+    if (staffThread) url.searchParams.set("known", staffThread.id);
+    var response = await fetch(url, {
+      method: body ? "POST" : "GET",
+      credentials: "same-origin",
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(12000)
+    });
+    var result = await response.json();
+    if (!response.ok) {
+      var error = new Error(result.error || "Staff chat is unavailable.");
+      error.status = response.status;
+      throw error;
     }
+    return result;
+  }
 
-    // If already connected to staff, save the customer's message
-    if (active) {
-      var all = read();
-
-      all.forEach(function (inquiry) {
-        if (inquiry.id === active) {
-          inquiry.messages.push({
-            sender: "customer",
-            text: message,
-            time: new Date().toISOString()
-          });
-
-          inquiry.question = message;   // list preview shows the latest message
-          inquiry.status = "open";      // needs a staff reply again
-          seen = inquiry.messages.length;
-        }
+  function receiveStaffChat(result) {
+    if (staffThread?.id !== result.thread?.id) {
+      staffCursor = 0;
+      staffMsgs.replaceChildren();
+    }
+    staffThread = result.thread;
+    staffAvailable = result.available;
+    if (staffThread) {
+      staffThread.messages.forEach(function (message) {
+        if (message.id <= staffCursor) return;
+        var element = document.createElement("div");
+        element.className = "cb-m " + (message.sender === "staff" ? "staff" : "user");
+        element.textContent = message.text;
+        staffMsgs.appendChild(element);
+        staffCursor = message.id;
       });
+    }
+    updateStaffIndicator();
+    if (staffMode() && staffThread.messages.length) staffMsgs.scrollTop = staffMsgs.scrollHeight;
+  }
 
-      D.put(KEY, all);
-      save();
+  function reportStaffError(error, writing) {
+    if (error.status === 401) {
+      staffAccess = false;
+      pendingStaffMessage = null;
+      receiveStaffChat({ thread: null, available: false });
+      if (writing || isLoggedIn()) showStaffError(LOGIN_MSG);
       return;
     }
+    showStaffError(error.status ? error.message :
+      writing ? "Could not confirm delivery. Try sending again." : "Staff chat could not connect. Reconnecting…");
+  }
 
-    // Built-in answers only for English; other languages go to Gemini
-    var local = looksEnglish(message) ? localReply(message) : null;
-
-    if (local) {
-      var wantsStaff = local.esc;
-
-      // Guests cannot open a staff chat: ask them to log in instead
-      if (wantsStaff && !isLoggedIn()) {
-        local.text = LOGIN_MSG;
-        wantsStaff = false;
+  async function refreshStaffChat() {
+    if (staffReading || staffSaving || !staffAccess || document.hidden || !cb.classList.contains("open")) return;
+    staffReading = true;
+    var version = staffVersion;
+    try {
+      var result = await staffRequest();
+      if (version === staffVersion) {
+        receiveStaffChat(result);
+        if (!pendingStaffMessage) showStaffError("");
       }
+    } catch (error) {
+      if (version === staffVersion) reportStaffError(error, false);
+    } finally {
+      staffReading = false;
+      if (version !== staffVersion) refreshStaffChat();
+    }
+  }
 
-      remember("user", message);
+  async function sendToStaff(action, text) {
+    if (staffSaving) return;
+    var request = pendingStaffMessage;
+    if (!request || request.action !== action || request.text !== text) {
+      var token = Array.from(crypto.getRandomValues(new Uint8Array(16)), function (byte) {
+        return byte.toString(16).padStart(2, "0");
+      }).join("");
+      request = pendingStaffMessage = { action: action, text: text, token: token };
+    }
+    var version = ++staffVersion;
+    staffSaving = true;
+    reopen.disabled = talk.disabled = form.querySelector('[type="submit"]').disabled = true;
+    showStaffError("");
+    try {
+      var result = await staffRequest(request);
+      if (staffVersion !== version) return;
+      staffAccess = true;
+      staffPaused = false;
+      pendingStaffMessage = null;
+      receiveStaffChat(result);
+      if (input.value.trim() === text) input.value = "";
+      save();
+    } catch (error) {
+      if (staffVersion === version) {
+        if (error.status === 409) pendingStaffMessage = null;
+        reportStaffError(error, true);
+      }
+    } finally {
+      staffSaving = false;
+      reopen.disabled = talk.disabled = form.querySelector('[type="submit"]').disabled = false;
+      refreshStaffChat();
+    }
+  }
+
+  function returnToBot() {
+    if (staffSaving) return;
+    staffPaused = true;
+    showStaffError("");
+    updateStaffIndicator();
+    save();
+    input.focus();
+  }
+
+  function showOrRequestStaff(message) {
+    if (staffThread) {
+      staffPaused = false;
+      updateStaffIndicator();
+      staffMsgs.scrollTop = staffMsgs.scrollHeight;
+      save();
+      refreshStaffChat();
+    } else {
+      sendToStaff("request", message);
+    }
+  }
+
+  function send(message) {
+    var text = message.trim();
+    if (/^(back to bot|bot|assistant)$/i.test(text)) {
+      returnToBot();
+      return;
+    }
+    if (staffMode()) {
+      if (staffThread.status !== "closed") sendToStaff("send", text);
+      return;
+    }
+    if (/\b(?:talk|speak|chat|connect)\b.{0,40}\b(?:staff|human|agent|representative|team member|person)\b|^(?:staff|human|agent|representative)(?: please)?[.!?]?$/i.test(text)) {
+      showOrRequestStaff(text);
+      return;
+    }
+    if (busy || staffSaving) return;
+    input.value = "";
+    add(text, "user");
+
+    var local = looksEnglish(text) ? localReply(text) : null;
+    if (local) {
+      remember("user", text);
       remember("model", local.text);
-
-      setTimeout(function () {
-        add(local.text, "bot");
-
-        if (wantsStaff) {
-          escalate(message);
-        }
-      }, 300);
-
+      add(local.text, "bot");
       return;
     }
 
-    // Otherwise, request a Gemini AI response
     busy = true;
-
+    var account = whoKey;
     var typing = add("Typing...", "bot", true);
 
-    askAI(message)
+    askAI(text)
       .then(function (answer) {
+        if (whoKey !== account) return;
         typing.textContent = answer;
-
-        remember("user", message);
+        remember("user", text);
         remember("model", answer);
       })
       .catch(function (error) {
+        if (whoKey !== account) return;
         console.error("Chatbot AI error:", error);
-
-        if (isLoggedIn()) {
-          typing.textContent =
-            "I apologize, I am unable to answer that at the moment. I am connecting you with a Densco team member, who will reply to you here shortly.";
-          escalate(message);
-        } else {
-          typing.textContent =
-            "I apologize, I am unable to answer that at the moment. Please log in to chat with our team, or message us on Viber or Messenger.";
+        typing.textContent = "I couldn’t answer that right now.";
+        if (isLoggedIn() && !staffSaving && !staffMode()) {
+          sendToStaff("request", text);
+        } else if (!isLoggedIn()) {
+          typing.textContent += " " + LOGIN_MSG;
         }
       })
       .then(function () {
+        if (whoKey !== account) return;
         busy = false;
         msgs.scrollTop = msgs.scrollHeight;
         save();
       });
   }
 
-  // Open and close the chatbot
   document.getElementById("cbFab").onclick = function () {
     cb.classList.add("open");
     input.focus();
+    refreshStaffChat();
   };
 
   document.getElementById("cbX").onclick = function () {
     cb.classList.remove("open");
   };
 
-  // Submit typed messages
-  document.getElementById("cbForm").onsubmit = function (event) {
+  form.onsubmit = function (event) {
     event.preventDefault();
-
     var message = input.value.trim();
-
-    if (message) {
-      input.value = "";
-      send(message);
-    }
+    if (message) send(message);
   };
 
-  // Handle suggested question buttons
-  document.getElementById("cbChips").onclick = function (event) {
-    if (event.target.tagName === "BUTTON") {
+  chips.onclick = function (event) {
+    if (event.target === talk) {
+      showOrRequestStaff("Talk to staff");
+    } else if (event.target.tagName === "BUTTON") {
       send(event.target.textContent);
     }
   };
-
-
   // ===== VOICE CODE =====
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   var mic = document.getElementById("cbMic");
@@ -826,34 +888,17 @@
   // ===== END VOICE CODE =====
 
 
-  // Check for staff replies, and for login or logout without a page reload
-  setInterval(function () {
+  function syncChat() {
     var nowUser = currentUser();
-
     if (userKey(nowUser) !== whoKey) {
       who = nowUser;
       whoKey = userKey(nowUser);
       loadChat();
-      return;
     }
+    refreshStaffChat();
+  }
 
-    if (!active) return;
-
-    var inquiry = find(active);
-
-    if (!inquiry) return;
-
-    var changed = false;
-
-    for (var i = seen; i < inquiry.messages.length; i++) {
-      if (inquiry.messages[i].sender === "staff") {
-        add(inquiry.messages[i].text, "staff", true);
-        changed = true;
-      }
-    }
-
-    seen = inquiry.messages.length;
-
-    if (changed) save();
-  }, POLL);
+  document.addEventListener("visibilitychange", syncChat);
+  window.addEventListener("storage", syncChat);
+  setInterval(syncChat, POLL);
 })();

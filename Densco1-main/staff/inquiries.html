@@ -11,7 +11,7 @@
     />
     <link rel="stylesheet" href="../css/style.css" />
   </head>
-  <body data-page="inquiries" data-roles="owner admin">
+  <body data-page="inquiries" data-roles="owner admin inventory">
     <div class="app">
       <aside class="sidebar" id="sidebar"></aside>
       <div class="app-main">
@@ -25,22 +25,23 @@
           <div class="inq">
             <div class="card" style="padding: 14px">
               <h3>Conversations</h3>
-              <div class="inq-list" id="list"></div>
+              <div class="inq-list" id="list"><p class="muted">Loading conversations…</p></div>
             </div>
             <div class="card">
               <h3 id="title">Select a conversation</h3>
-              <div class="thread" id="thread">
-                <div class="empty">
-                  Choose a conversation from the list to view and reply.
-                </div>
+              <p id="chatState" role="status"></p>
+              <p class="hide" id="chatError" role="status"></p>
+              <div class="thread" id="thread" role="log" aria-label="Conversation messages">
               </div>
               <form class="reply hide" id="replyForm">
                 <input
                   id="replyIn"
                   placeholder="Type your reply"
+                  aria-label="Reply to customer"
                   autocomplete="off"
-                /><button class="btn btn-red">Send</button>
+                /><button class="btn btn-red" type="submit">Send</button>
               </form>
+              <button class="btn btn-sm hide" id="endConversation" type="button">End conversation</button>
             </div>
           </div>
         </main>
@@ -48,80 +49,6 @@
     </div>
     <script src="../js/store.js"></script>
     <script src="../js/staff-portal.js"></script>
-    <script>
-      const K = "denscoInquiries";
-      let active = null;
-      function read() {
-        return DHP.get(K, []);
-      }
-      function write(v) {
-        DHP.put(K, v);
-      }
-      function renderList() {
-        const L = read();
-        document.getElementById("list").innerHTML = L.length
-          ? L.map(
-              (i) =>
-                `<div class="inq-item ${i.id === active ? "on" : ""}" data-id="${i.id}"><div><b>${DHP.esc(i.customer)}</b><span class="badge ${i.status === "answered" ? "completed" : "pending"}">${i.status === "answered" ? "Answered" : "Open"}</span></div><p>${DHP.esc(i.question)}</p></div>`,
-            ).join("")
-          : '<div class="empty">No escalated conversations yet.</div>';
-      }
-      function renderThread() {
-        const t = document.getElementById("thread"),
-          f = document.getElementById("replyForm"),
-          i = read().find((x) => x.id === active);
-        if (!i) {
-          document.getElementById("title").textContent =
-            "Select a conversation";
-          t.innerHTML =
-            '<div class="empty">Choose a conversation from the list to view and reply.</div>';
-          f.classList.add("hide");
-          return;
-        }
-        document.getElementById("title").textContent = i.customer + ", " + i.id;
-        t.innerHTML = i.messages
-          .map(
-            (m) =>
-              `<div class="bubble ${m.sender === "staff" ? "staff" : "customer"}">${DHP.esc(m.text)}</div>`,
-          )
-          .join("");
-        t.scrollTop = t.scrollHeight;
-        f.classList.remove("hide");
-      }
-      document.getElementById("list").addEventListener("click", (e) => {
-        const it = e.target.closest("[data-id]");
-        if (!it) return;
-        active = it.dataset.id;
-        renderList();
-        renderThread();
-      });
-      document.getElementById("replyForm").addEventListener("submit", (e) => {
-        e.preventDefault();
-        const inp = document.getElementById("replyIn"),
-          t = inp.value.trim();
-        if (!t) return;
-        const L = read();
-        L.forEach((i) => {
-          if (i.id === active) {
-            i.messages.push({
-              sender: "staff",
-              text: t,
-              time: new Date().toISOString(),
-            });
-            i.status = "answered";
-          }
-        });
-        write(L);
-        inp.value = "";
-        renderList();
-        renderThread();
-      });
-      setInterval(() => {
-        renderList();
-        renderThread();
-      }, 4000);
-      renderList();
-      renderThread();
-    </script>
+    <script src="../js/staff-inquiries.js"></script>
   </body>
 </html>
