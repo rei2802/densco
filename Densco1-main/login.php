@@ -227,7 +227,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   </main>
 
-  <footer class="ftr" id="siteFooter"></footer>
+  <footer class="ftr ftr-compact" id="siteFooter"></footer>
 
   <script src="api/settings.php?script=1"></script>
   <script src="js/store.js"></script>

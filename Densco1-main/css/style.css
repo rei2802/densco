@@ -1240,3 +1240,6 @@ button.inq-item{min-width:0;width:100%;font:inherit;text-align:left}
 #chatError{color:#793f00;background:#fff4e5;padding:7px 10px;border-radius:6px;font-size:13px}
 #endConversation{margin-top:10px}
 #cbStaffMsgs .cb-m,.inq .bubble{white-space:pre-wrap;overflow-wrap:anywhere}
+
+.ftr-compact{padding-block:32px 18px}
+.ftr-compact .ftr-bot{margin-top:22px;padding-top:14px}
