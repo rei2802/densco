@@ -229,6 +229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <footer class="ftr" id="siteFooter"></footer>
 
+  <script src="api/settings.php?script=1"></script>
   <script src="js/store.js"></script>
   <script src="js/auth.js"></script>
 </body>

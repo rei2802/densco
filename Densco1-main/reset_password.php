@@ -107,6 +107,7 @@ try { $valid = find_reset($conn, $token) !== null; } catch (Throwable $e) { erro
   </main>
   <footer class="ftr" id="siteFooter"></footer>
 
+  <script src="api/settings.php?script=1"></script>
   <script src="js/store.js"></script>
   <script src="js/auth.js"></script>
 <?php if ($valid): ?>

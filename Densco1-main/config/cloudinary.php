@@ -2,15 +2,12 @@
 
 require_once __DIR__ . '/../../vendor/autoload.php';
 
+use Cloudinary\Api\Upload\UploadApi;
 use Cloudinary\Configuration\Configuration;
 
-Configuration::instance([
-    'cloud' => [
-        'cloud_name' => 'cm94cbki',
-        'api_key'    => '888343599292784',
-        'api_secret' => 'qsoU9sYANAkZCLDiHhOuoaPNzJg'
-    ],
-    'url' => [
-        'secure' => true
-    ]
-]);
+function cloudinary_upload_api(): UploadApi {
+    $url = getenv('CLOUDINARY_URL');
+    if (!$url) throw new RuntimeException('CLOUDINARY_URL is not configured.');
+    Configuration::instance($url)->url->secure = true;
+    return new UploadApi();
+}

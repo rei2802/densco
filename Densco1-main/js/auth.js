@@ -76,10 +76,17 @@
     });
   var lo = document.getElementById("logoutLink");
   if (lo)
-    lo.addEventListener("click", function (e) {
+    lo.addEventListener("click", async function (e) {
       e.preventDefault();
-      D.logout();
-      location.href = "index.php";
+      if (lo.getAttribute("aria-disabled") === "true") return;
+      lo.setAttribute("aria-disabled", "true");
+      try {
+        await D.logout();
+        location.href = "index.php";
+      } catch (error) {
+        lo.removeAttribute("aria-disabled");
+        D.toast("Could not log out. Please try again.");
+      }
     });
 
   // ---------------------------------------------------------------------
@@ -89,7 +96,7 @@
   // ---------------------------------------------------------------------
   D.sessionExpired = function () {
     if (document.getElementById("sessionExpiredModal")) return;
-    D.logout(); // automatic log out: the customer is no longer signed in on this browser
+    D.clearCustomer();
 
     var next = page + location.search;
     var loginUrl =

@@ -19,6 +19,13 @@ if (!$role) {
     exit;
 }
 
+// All three staff roles may review orders and update fulfillment.
+if (!in_array($role, ['owner', 'admin', 'inventory'], true)) {
+    if ($isApi) json_out(403, ['success' => false, 'error' => 'Not allowed.']);
+    header('Location: dashboard.html');
+    exit;
+}
+
 try {
     require_once '../config.php';
     require_once '../orders_lib.php';
@@ -50,13 +57,6 @@ try {
         // Revenue is only shown to the owner
         if ($role === 'owner') $payload['revenue'] = $revenue;
         json_out(200, $payload);
-    }
-
-    // Only the owner and admin may see / manage customer orders
-    if (!in_array($role, ['owner', 'admin', 'inventory'], true)) {
-        if ($isApi) json_out(403, ['success' => false, 'error' => 'Not allowed.']);
-        header('Location: dashboard.html');
-        exit;
     }
 
     // Update an order's status

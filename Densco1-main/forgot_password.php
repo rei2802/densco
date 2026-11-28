@@ -1,6 +1,7 @@
 <?php
 require_once 'config.php';
 require_once 'password_reset_lib.php';
+require_once 'mail_lib.php';
 session_start();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -38,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $recent->close();
 
             if (!$tooSoon) {
+                $origin = site_base_url();
                 $token = bin2hex(random_bytes(32));
                 $hash  = hash('sha256', $token);
                 $mins  = RESET_TOKEN_MINUTES;
@@ -46,18 +48,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ins->execute();
                 $ins->close();
 
-                $link = site_base_url() . '/reset_password.php?token=' . $token;
+                $link = $origin . '/reset_password.php?token=' . $token;
                 $body = "Hello " . $user['full_name'] . ",\r\n\r\n"
                       . "We received a request to reset your Densco Health Products password.\r\n"
                       . "Open this link to choose a new one (valid for $mins minutes):\r\n\r\n$link\r\n\r\n"
                       . "If you did not ask for this, you can ignore this email; your password stays the same.\r\n";
-                $headers = "From: Densco Health Products <no-reply@" . preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST'] ?? 'localhost') . ">\r\nContent-Type: text/plain; charset=UTF-8\r\n";
-                $sent = @mail($email, 'Reset your Densco password', $body, $headers);
-                if (!$sent) error_log('forgot_password.php: mail() could not send the reset email (configure SMTP / sendmail on the server).');
-
-                // Local testing only: show the link on screen because XAMPP has no mail server.
-                // This is never included on a real domain.
-                if (is_local_host()) $reply['dev_link'] = $link;
+                $html = '<p>Hello ' . htmlspecialchars($user['full_name'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . ',</p>'
+                      . '<p>We received a request to reset your Densco Health Products password.</p>'
+                      . '<p><a href="' . htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                      . '">Reset your password</a> (valid for ' . $mins . ' minutes).</p>'
+                      . '<p>If you did not ask for this, you can ignore this email. Your password stays the same.</p>';
+                $sent = send_email($email, $user['full_name'], 'Reset your Densco password', $html, $body);
+                if (!$sent && getenv('APP_ENV') === 'local' && is_local_host() && !getenv('RENDER')) {
+                    $reply['dev_link'] = $link;
+                }
             }
         }
         echo json_encode($reply);
@@ -104,6 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </main>
   <footer class="ftr" id="siteFooter"></footer>
 
+  <script src="api/settings.php?script=1"></script>
   <script src="js/store.js"></script>
   <script src="js/auth.js"></script>
   <script>

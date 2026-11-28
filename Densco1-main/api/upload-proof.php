@@ -4,8 +4,6 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../config/cloudinary.php';
 
-use Cloudinary\Api\Upload\UploadApi;
-
 function json_out($code, $payload) {
     http_response_code($code);
     echo json_encode($payload);
@@ -35,7 +33,7 @@ try {
     // reusing the Configuration already set up in config/cloudinary.php.
     // resource_type 'auto' is used (rather than inventory.php's default 'image')
     // because cart.php's #proof input also accepts PDF receipts.
-    $result = (new UploadApi())->upload(
+    $result = cloudinary_upload_api()->upload(
         $_FILES['proof']['tmp_name'],
         [
             'folder' => 'densco/proofs',

@@ -1,8 +1,8 @@
 <?php
 require_once '../config.php';
 require_once __DIR__ . '/../config/cloudinary.php';
+require_once __DIR__ . '/../settings_lib.php';
 
-use Cloudinary\Api\Upload\UploadApi;
 // Suppliers a product can be sourced from, and the default for every product.
 // The products.supplier column is added automatically the first time this page runs
 // (existing products get the default).
@@ -31,7 +31,7 @@ function handleProductImageUpload($fileKey)
 
     try {
 
-        $result = (new UploadApi())->upload(
+        $result = cloudinary_upload_api()->upload(
             $_FILES[$fileKey]['tmp_name'],
             [
                 'folder' => 'densco/products'
@@ -64,7 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['summary'])) {
     // Low / out of stock list (staff only). Same rule as the Inventory page:
     // 0 = out of stock, up to the low-stock level from Settings = low stock.
     if (!empty($_SESSION['staff_role'])) {
-        $low = max(1, (int)($_GET['low'] ?? 10));
+        $low = business_settings($conn)['lowStock'];
+        $out['low'] = $low;
         $stmt = $conn->prepare(
             "SELECT product_name, category, stock_quantity FROM products
              WHERE hidden = 0 AND stock_quantity <= ?
@@ -413,7 +414,7 @@ while ($row = $res->fetch_assoc()) {
 
         <div class="page-head">
           <h1>Inventory management</h1>
-          <p class="muted">Product catalog, stock control and restock requests, synced with online stock.</p>
+          <p class="muted">Product catalog and stock control.</p>
         </div>
 
         <div class="toolbar">
@@ -538,9 +539,9 @@ while ($row = $res->fetch_assoc()) {
   </div>
 
   <script>window.DHP_PRODUCTS = <?php echo json_encode($products); ?>;</script>
+  <script src="../api/settings.php?script=1"></script>
   <script src="../js/store.js"></script>
   <script src="../js/staff-portal.js"></script>
-  <script src="../js/restock.js"></script>
   <script>
     DHP.applyRoles(document);
 

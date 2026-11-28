@@ -698,6 +698,7 @@ if ($isApi) {
 
   <div id="printArea"></div>
 
+  <script src="../api/settings.php?script=1"></script>
   <script src="../js/store.js"></script>
   <script src="../js/staff-portal.js"></script>
   <script>
@@ -1158,7 +1159,7 @@ if ($isApi) {
         const from = $("gFrom").value, to = $("gTo").value;
         if (!from || !to) { $("editErr").textContent = "Choose the period to cover."; return; }
         if (from > to) { $("editErr").textContent = "The start date must be on or before the end date."; return; }
-        const low = (DHP.settings() && +DHP.settings().lowStock) || 10;
+        const low = DHP.settings().lowStock;
         busy = true;
         $("editErr").textContent = "";
         $("genBtn").disabled = true;

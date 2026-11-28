@@ -40,6 +40,7 @@
         </main>
       </div>
     </div>
+    <script src="../api/settings.php?script=1"></script>
     <script src="../js/store.js"></script>
     <script src="../js/staff-portal.js"></script>
     <script>
@@ -109,7 +110,7 @@
 
       function renderLow() {
         if (!INV || !INV.low_items) return;
-        const low = DHP.settings().lowStock;
+        const low = INV.low ?? DHP.settings().lowStock;
         $("low").innerHTML = INV.low_items.length
           ? '<div class="list">' +
             INV.low_items
@@ -141,7 +142,7 @@
           $("pendingList").innerHTML = '<p class="muted">Could not load orders.</p>';
         });
 
-      fetch("inventory.php?summary=1&low=" + encodeURIComponent(DHP.settings().lowStock), { credentials: "same-origin" })
+      fetch("inventory.php?summary=1", { credentials: "same-origin" })
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
           if (d && d.success) INV = d;

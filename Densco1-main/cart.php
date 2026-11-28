@@ -102,12 +102,9 @@ while ($row = $res->fetch_assoc()) {
 
           <div class="card mt hide" id="paymentDetails">
             <h3>Payment Instructions</h3>
-            <p class="muted sm" style="margin-top:-4px">Scan the QR code with GCash (or any QR Ph app), send the exact total, then enter the reference number from your receipt below.</p>
+            <p class="muted sm" style="margin-top:-4px">Send the exact total to the GCash number below, then enter the reference number from your receipt.</p>
 
             <div id="gcashDetails" class="qr-pay">
-              <img id="gcashQr" class="qr-img" src="assets/gcash-qr.png" alt="Densco GCash / QR PH code" width="220" height="220"
-                   onerror="this.classList.add('hide'); document.getElementById('qrMissing').classList.remove('hide');">
-              <p class="muted sm hide" id="qrMissing">QR code isn't available right now. Send your payment to the GCash number below.</p>
               <div>
                 <p><strong>GCash / QR PH</strong></p>
                 <p>Account Name: <strong>MITZ S.</strong></p>
@@ -143,6 +140,7 @@ while ($row = $res->fetch_assoc()) {
   <footer class="ftr" id="siteFooter"></footer>
 
   <script>window.DHP_PRODUCTS = <?php echo json_encode($products); ?>;</script>
+  <script src="api/settings.php?script=1"></script>
   <script src="js/store.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/chatbot.js"></script>
@@ -300,13 +298,11 @@ while ($row = $res->fetch_assoc()) {
         }
       }
 
-      const sub = L.reduce((s, l) => s + l.p.price * l.qty, 0);
-      const total = sub + (del ? FEE : 0);
+      const subtotalCents = L.reduce((sum, line) => sum + Math.round(line.p.price * 100) * line.qty, 0);
 
       const items = L.map((l) => ({
         product_id: l.p.id,
-        quantity: l.qty,
-        price: l.p.price
+        quantity: l.qty
       }));
 
       const btn = $("place");
@@ -314,8 +310,7 @@ while ($row = $res->fetch_assoc()) {
       err.textContent = "";
 
       const orderData = {
-        customer: DHP.user(),
-        total: total,
+        quoted_total_cents: subtotalCents + (del ? Math.round(FEE * 100) : 0),
         fulfillment: del ? "Delivery" : "Store Pickup",
         address: del ? $("addr").value.trim() : "",
         phone: $("phone").value.trim(),

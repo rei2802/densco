@@ -88,6 +88,7 @@ unset($p);
     </main>
     <footer class="ftr" id="siteFooter"></footer>
     <script>window.DHP_PRODUCTS = <?php echo json_encode($products); ?>;</script>
+    <script src="api/settings.php?script=1"></script>
     <script src="js/store.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/chatbot.js"></script>

@@ -21,6 +21,18 @@ function ensure_reset_table(mysqli $conn) {
 }
 
 function site_base_url() {
+    $configured = getenv('APP_URL') ?: getenv('RENDER_EXTERNAL_URL');
+    if ($configured) {
+        $url = parse_url($configured);
+        if (!$url || !in_array($url['scheme'] ?? '', ['https', 'http'], true) || empty($url['host'])
+            || isset($url['query']) || isset($url['fragment']) || isset($url['user'])) {
+            throw new RuntimeException('Invalid application URL.');
+        }
+        return rtrim($configured, '/');
+    }
+    if (getenv('RENDER') || !is_local_host()) {
+        throw new RuntimeException('Configure APP_URL for password reset links.');
+    }
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
     $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');

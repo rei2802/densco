@@ -109,20 +109,14 @@
     "Baby Crib"
   ];
   D.settings = function () {
-    var s = get("denscoSettings", {});
-    s.lowStock = +s.lowStock || 10;
-    s.deliveryFee =
-      s.deliveryFee === undefined || s.deliveryFee === ""
-        ? 120
-        : +s.deliveryFee;
-    return s;
+    return Object.assign({ lowStock: 10, deliveryFee: 120 }, window.DHP_SETTINGS);
   };
   // Business details shown on the home page, footer and chatbot.
   // >>> Fill in the three empty values below with the real ones. <<<
   //   viber    : Viber number, e.g. "0917 123 4567"
   //   facebook : full link to the Facebook page, e.g. "https://www.facebook.com/yourpage"
   //   mapUrl   : Google Maps link to the exact location (optional, adds a "View on map" link)
-  // They can also be changed by the Owner in Settings (saved in that browser only).
+  // The owner can override these defaults for all users in Settings.
   var BIZ_DEFAULTS = {
     address: "Quezon City, Metro Manila, Philippines",
     hours: "Monday to Saturday, 8:00 AM to 6:00 PM",
@@ -237,10 +231,20 @@
   D.login = function (n) {
     put("denscoUser", n || "Dr. Maria Clara");
   };
-  D.logout = function () {
+  D.clearCustomer = function () {
     try {
       localStorage.removeItem("denscoUser");
     } catch (e) {}
+  };
+  D.logout = async function () {
+    var response = await fetch("logout.php", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: "{}"
+    });
+    if (!response.ok || !(await response.json()).success) throw new Error("Could not log out.");
+    D.clearCustomer();
   };
 
   // No demo orders: the order history starts empty until real orders are placed.
